@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dynasty Tycoon — Auction Draft Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#080D18;
+  --surface:#0F1623;
+  --card:#151E2E;
+  --card2:#1C2740;
+  --border:#1F2E46;
+  --border2:#2A3D5C;
+  --green:#00C97A;
+  --green-dim:#00C97A18;
+  --green-mid:#00C97A44;
+  --amber:#F5A623;
+  --amber-dim:#F5A62322;
+  --red:#F04D4D;
+  --red-dim:#F04D4D22;
+  --blue:#3B82F6;
+  --pink:#E879B0;
+  --text:#E8EFF8;
+  --text2:#7A90AE;
+  --text3:#3E506B;
+  --font-head:'Barlow Condensed',sans-serif;
+  --font-body:'DM Sans',sans-serif;
+  --font-mono:'DM Mono',monospace;
+}
+html{background:var(--bg);color:var(--text);font-family:var(--font-body);}
+body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
+
+/* HEADER */
+.site-header{padding:32px 32px 0;display:flex;align-items:flex-start;justify-content:space-between;animation:fadeUp .5s ease both;}
+.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--green);font-family:var(--font-mono);margin-bottom:6px;}
+.title{font-family:var(--font-head);font-size:44px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--text);}
+.title span{color:var(--green);}
+.subtitle{font-size:14px;color:var(--text2);margin-top:8px;}
+.header-badges{display:flex;flex-direction:column;gap:6px;align-items:flex-end;padding-top:4px;}
+.hbadge{font-family:var(--font-mono);font-size:11px;padding:4px 12px;border-radius:20px;background:var(--card);border:1px solid var(--border2);color:var(--text2);}
+.hbadge strong{color:var(--text);font-weight:500;}
+
+/* DIVIDER */
+.hdivider{height:1px;background:linear-gradient(90deg,transparent,var(--border2) 30%,var(--border2) 70%,transparent);margin:24px 32px 0;}
+
+/* STAT ROW */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:20px 32px 0;animation:fadeUp .5s .1s ease both;}
+.stat-cell{background:var(--surface);padding:20px 22px;position:relative;}
+.stat-cell:nth-child(1)::after,.stat-cell:nth-child(2)::after{content:'';position:absolute;bottom:0;left:22px;right:22px;height:2px;border-radius:2px;}
+.stat-cell:nth-child(1)::after{background:var(--green);}
+.stat-cell:nth-child(2)::after{background:var(--amber);}
+.stat-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);margin-bottom:8px;}
+.stat-value{font-family:var(--font-head);font-size:32px;font-weight:800;color:var(--text);line-height:1;}
+.stat-sub{font-size:12px;color:var(--text2);margin-top:4px;}
+
+/* TABS */
+.tab-bar{display:flex;gap:0;padding:28px 32px 0;animation:fadeUp .5s .15s ease both;}
+.tab-btn{font-family:var(--font-head);font-size:15px;font-weight:700;letter-spacing:.5px;padding:10px 24px;background:none;border:none;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;transition:color .2s,border-color .2s;}
+.tab-btn.on{color:var(--green);border-bottom-color:var(--green);}
+.tab-btn:hover:not(.on){color:var(--text2);}
+.tab-divider{height:1px;background:var(--border);margin:0 32px;}
+
+/* PANELS */
+.panel{display:none;padding:28px 32px 0;animation:fadeUp .3s ease both;}
+.panel.on{display:block;}
+
+/* SECTION LABEL */
+.section-label{font-family:var(--font-head);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:32px 0 14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* CALLOUTS */
+.callout{background:var(--green-dim);border:1px solid var(--green-mid);border-left:3px solid var(--green);border-radius:0 8px 8px 0;padding:12px 16px;font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px;}
+.callout strong{color:var(--text);}
+.callout-amber{background:var(--amber-dim);border:1px solid #F5A62344;border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:12px 16px;font-size:13px;color:#C4904A;line-height:1.6;margin-bottom:20px;}
+.callout-amber strong{color:var(--amber);}
+
+/* CAP RULES GRID */
+.rules-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;}
+.rule-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.rule-label{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;}
+.rule-value{font-family:var(--font-head);font-size:26px;font-weight:800;color:var(--text);line-height:1;}
+.rule-value span{font-size:14px;font-weight:400;color:var(--text2);}
+.rule-detail{font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;}
+
+/* DEAD MONEY TABLE */
+.dm-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px;}
+.dm-table th{font-family:var(--font-head);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;}
+.dm-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-family:var(--font-mono);}
+.dm-table tr:last-child td{border-bottom:none;}
+.dm-table tr:hover td{background:var(--card);}
+.dm-pct{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;}
+.dm-0{background:var(--green-dim);color:var(--green);}
+.dm-25{background:#F5A62318;color:var(--amber);}
+.dm-50{background:#F5A62330;color:#F5A623;}
+.dm-75{background:var(--red-dim);color:var(--red);}
+.dm-100{background:#F04D4D33;color:#FF6B6B;}
+
+/* ALLOCATION BARS */
+.alloc-row{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--border);}
+.alloc-pos{font-family:var(--font-head);font-size:15px;font-weight:700;width:90px;color:var(--text);}
+.alloc-bar-wrap{flex:1;background:var(--card2);border-radius:3px;height:6px;overflow:hidden;}
+.alloc-bar{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.16,1,.3,1);}
+.alloc-range{font-family:var(--font-mono);font-size:13px;color:var(--text);width:72px;text-align:right;}
+.alloc-note{font-size:12px;color:var(--text3);width:160px;text-align:right;}
+
+/* TIERS TABLE */
+.tier-tbl{width:100%;border-collapse:collapse;}
+.tier-tbl thead th{font-family:var(--font-head);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;}
+.tier-tbl tbody tr{transition:background .15s;cursor:default;}
+.tier-tbl tbody tr:hover{background:var(--card);}
+.tier-tbl tbody td{padding:11px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+.ptag{font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;display:inline-block;letter-spacing:.5px;}
+.pQB{background:#1E3A6E;color:#60A5FA;}.pWR{background:#0D3B2A;color:#34D399;}.pRB{background:#3D2B00;color:#FCD34D;}.pTE{background:#3B1240;color:#E879B0;}
+.tbadge{font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 10px;border-radius:20px;display:inline-block;}
+.t1{background:#00C97A22;color:#00C97A;border:1px solid #00C97A44;}.t2{background:#3B82F622;color:#60A5FA;border:1px solid #3B82F644;}.t3{background:#F5A62322;color:#FCD34D;border:1px solid #F5A62344;}.t4{background:#1F2E4699;color:var(--text3);border:1px solid var(--border);}
+
+/* PRINCIPLES */
+.prin-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.prin-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:border-color .2s,transform .2s;}
+.prin-card:hover{border-color:var(--border2);transform:translateY(-1px);}
+.prin-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.prin-icon{width:28px;height:28px;border-radius:6px;background:var(--green-dim);border:1px solid var(--green-mid);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.prin-icon svg{width:14px;height:14px;stroke:var(--green);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.prin-title{font-family:var(--font-head);font-size:15px;font-weight:700;color:var(--text);}
+.prin-body{font-size:12px;color:var(--text2);margin:0;line-height:1.6;}
+
+/* DRAFT TRACKER */
+.budget-block{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;}
+.budget-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+.bmet{border-right:1px solid var(--border);}
+.bmet:last-child{border-right:none;}
+.bmet-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);margin-bottom:6px;}
+.bmet-value{font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--text);}
+.bmet-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.budget-bar-outer{background:var(--card2);border-radius:4px;height:8px;overflow:hidden;}
+.budget-bar-inner{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.16,1,.3,1),background .5s;}
+.budget-bar-labels{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-top:6px;}
+.pos-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.pos-pill{font-family:var(--font-mono);font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid;}
+.add-form-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;}
+.form-title{font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.form-title::before{content:'';width:3px;height:18px;background:var(--green);border-radius:2px;display:block;}
+.form-row{display:grid;grid-template-columns:2fr 90px 80px 90px 130px auto;gap:10px;align-items:end;}
+.fg{display:flex;flex-direction:column;gap:5px;}
+.fg label{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);}
+.fg input,.fg select{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-body);font-size:13px;padding:9px 12px;border-radius:7px;outline:none;transition:border-color .2s;-webkit-appearance:none;appearance:none;}
+.fg input::placeholder{color:var(--text3);}
+.fg input:focus,.fg select:focus{border-color:var(--green);}
+.fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A90AE' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;}
+.add-btn{background:var(--green);color:#000;font-family:var(--font-head);font-size:14px;font-weight:800;letter-spacing:.5px;padding:10px 20px;border:none;border-radius:7px;cursor:pointer;text-transform:uppercase;transition:opacity .15s,transform .1s;white-space:nowrap;}
+.add-btn:hover{opacity:.9;}
+.add-btn:active{transform:scale(.97);}
+.player-list-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.player-list-header{display:grid;grid-template-columns:1fr 56px 40px 64px 100px 80px 32px;padding:10px 20px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);border-bottom:1px solid var(--border);background:var(--surface);}
+.player-row-item{display:grid;grid-template-columns:1fr 56px 40px 64px 100px 80px 32px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .15s;}
+.player-row-item:last-child{border-bottom:none;}
+.player-row-item:hover{background:var(--card2);}
+.player-name-cell{font-weight:500;color:var(--text);}
+.player-cell{text-align:right;color:var(--text2);font-family:var(--font-mono);font-size:12px;}
+.player-cell.bold{color:var(--text);font-weight:500;}
+.del-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:4px;display:flex;align-items:center;justify-content:center;margin-left:auto;transition:color .15s,background .15s;}
+.del-btn:hover{color:var(--red);background:var(--red-dim);}
+.empty-state{padding:40px 24px;text-align:center;color:var(--text3);font-size:13px;}
+
+/* CONTRACT CALC */
+.calc-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+.calc-result-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.calc-result-header{background:var(--surface);padding:16px 20px;border-bottom:1px solid var(--border);}
+.calc-main-value{font-family:var(--font-head);font-size:52px;font-weight:800;color:var(--green);line-height:1;}
+.calc-main-label{font-size:12px;color:var(--text2);margin-top:4px;font-family:var(--font-mono);}
+.calc-rows{padding:4px 20px 8px;}
+.calc-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+.calc-row:last-of-type{border-bottom:none;}
+.calc-lbl{font-size:13px;color:var(--text2);}
+.calc-val{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text);}
+.calc-val.danger{color:var(--red);}
+.calc-section-head{font-family:var(--font-head);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:14px 20px 6px;border-bottom:1px solid var(--border);}
+.dm-scenario-tbl{width:100%;border-collapse:collapse;}
+.dm-scenario-tbl th{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);padding:8px 20px;border-bottom:1px solid var(--border);text-align:left;}
+.dm-scenario-tbl td{padding:10px 20px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:12px;color:var(--text2);}
+.dm-scenario-tbl tr:last-child td{border-bottom:none;}
+.dm-scenario-tbl tr:hover td{background:var(--card2);}
+.rec-block{margin:0 20px 20px;border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.6;border-left:3px solid;}
+.rec-green{background:var(--green-dim);border-color:var(--green);color:#A3E6CC;}
+.rec-amber{background:var(--amber-dim);border-color:var(--amber);color:#F5C97A;}
+.rec-red{background:var(--red-dim);border-color:var(--red);color:#F49090;}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.panel.on .alloc-row,.panel.on .tier-tbl tbody tr,.panel.on .prin-card,.panel.on .rule-card{animation:fadeUp .3s ease both;}
+.panel.on .alloc-row:nth-child(1){animation-delay:.03s;}
+.panel.on .alloc-row:nth-child(2){animation-delay:.06s;}
+.panel.on .alloc-row:nth-child(3){animation-delay:.09s;}
+.panel.on .alloc-row:nth-child(4){animation-delay:.12s;}
+.panel.on .alloc-row:nth-child(5){animation-delay:.15s;}
+.panel.on .alloc-row:nth-child(6){animation-delay:.18s;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div class="site-header">
+  <div class="header-left">
+    <div class="eyebrow">Dynasty Tycoon Contract League · Startup Auction</div>
+    <div class="title">Draft <span>Model</span></div>
+    <div class="subtitle">12-team · Superflex · 0.5 / 1.0 PPR · League Tycoon</div>
+  </div>
+  <div class="header-badges">
+    <div class="hbadge">Draft Budget <strong>$250</strong></div>
+    <div class="hbadge">Season Cap <strong>$300</strong></div>
+    <div class="hbadge">FAAB Holdback <strong>$50</strong></div>
+    <div class="hbadge">Contracts <strong>1–4 years</strong></div>
+  </div>
+</div>
+
+<div class="hdivider"></div>
+
+<div class="stat-row">
+  <div class="stat-cell">
+    <div class="stat-label">Auction budget</div>
+    <div class="stat-value" style="color:var(--green);">$250</div>
+    <div class="stat-sub">$300 cap – $50 FAAB holdback</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-label">FAAB holdback</div>
+    <div class="stat-value" style="color:var(--amber);">$50</div>
+    <div class="stat-sub">Spent = gone. No rollover.</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-label">Starter spots</div>
+    <div class="stat-value">10</div>
+    <div class="stat-sub">QB · 2RB · 3WR · TE · 2FLX · SF</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-label">Max contract</div>
+    <div class="stat-value">4 <span style="font-size:18px;color:var(--text2);font-weight:400;">yrs</span></div>
+    <div class="stat-sub">24% cap discount at 4 yrs</div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
+  <button class="tab-btn" onclick="sw('draft',this)">Draft Tracker</button>
+  <button class="tab-btn" onclick="sw('calc',this)">Contract Calc</button>
+</div>
+<div class="tab-divider"></div>
+
+<!-- ========== PLAN PANEL ========== -->
+<div class="panel on" id="p-plan">
+
+  <div class="callout"><strong>Startup rule #1:</strong> Let the first 3–5 players sell before you spend big. Early frenzy inflates prices 30–40%. With a $250 budget you have room — be patient.</div>
+
+  <div class="section-label">League cap rules</div>
+  <div class="rules-grid">
+    <div class="rule-card">
+      <div class="rule-label">Season cap</div>
+      <div class="rule-value">$300</div>
+      <div class="rule-detail">Increases proportionally with the NFL salary cap each offseason, rounded to the nearest full percent.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-label">Draft budget + FAAB</div>
+      <div class="rule-value">$250 <span>+ $50</span></div>
+      <div class="rule-detail">$250 to spend in the startup auction. The $50 holdback <strong style="color:var(--text);">is your entire FAAB</strong> for the season — once spent, it's gone.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-label">IR cap hit</div>
+      <div class="rule-value">100%</div>
+      <div class="rule-detail">Players on IR count fully against the cap. No relief for injured players — plan around it.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-label">Practice squad</div>
+      <div class="rule-value">25%</div>
+      <div class="rule-detail">PS players retained at 25% of salary. Eligible only for players in their <strong style="color:var(--text);">first two NFL years</strong>.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-label">Min salary</div>
+      <div class="rule-value">$1</div>
+      <div class="rule-detail">Every player's minimum salary is $1. Useful for stashing young PS-eligible players with near-zero cap hit.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-label">Dead money</div>
+      <div class="rule-value" style="color:var(--red);">Tiered</div>
+      <div class="rule-detail">100% salary dead cap this season + graduated next-year penalty based on years remaining. See table below.</div>
+    </div>
+  </div>
+
+  <div class="section-label">Dead money scale</div>
+  <div class="callout-amber"><strong>Know this before you bid.</strong> Cutting a player costs 100% of their salary as dead cap immediately. Next season's additional penalty scales with how many years remain on the deal when you cut.</div>
+  <table class="dm-table">
+    <thead><tr><th>Years remaining at time of cut</th><th>Next-season penalty</th><th>Example: $20/yr salary</th><th>Risk level</th></tr></thead>
+    <tbody>
+      <tr><td>1 year left</td><td><span class="dm-pct dm-0">0%</span></td><td style="color:var(--text2);">$0 next year</td><td style="color:var(--green);font-size:12px;">No future obligation</td></tr>
+      <tr><td>2 years left</td><td><span class="dm-pct dm-25">25%</span></td><td style="color:var(--text2);">$5 next year</td><td style="color:var(--amber);font-size:12px;">Manageable</td></tr>
+      <tr><td>3 years left</td><td><span class="dm-pct dm-50">50%</span></td><td style="color:var(--text2);">$10 next year</td><td style="color:var(--amber);font-size:12px;">Significant</td></tr>
+      <tr><td>4 years left</td><td><span class="dm-pct dm-75">75%</span></td><td style="color:var(--text2);">$15 next year</td><td style="color:var(--red);font-size:12px;">Severe</td></tr>
+      <tr><td>5 years left</td><td><span class="dm-pct dm-100">100%</span></td><td style="color:var(--text2);">$20 next year</td><td style="color:#FF6B6B;font-size:12px;">Full double-penalty</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-label" style="margin-top:36px;">Budget allocation</div>
+  <div id="alloc-tbl"></div>
+
+  <div class="section-label" style="margin-top:36px;">Position tier pricing</div>
+  <div class="callout">Superflex adds <strong>$8–15</strong> to QB prices (12 teams × 2 starters = 24 QB spots). TE Premium (1.0 PPR) adds <strong>$5–10</strong> to elite TEs.</div>
+  <table class="tier-tbl">
+    <thead><tr><th>Pos</th><th>Tier</th><th>Bid range</th><th>Contract</th><th>Notes</th></tr></thead>
+    <tbody id="tier-body"></tbody>
+  </table>
+
+  <div class="section-label" style="margin-top:36px;">Strategy principles</div>
+  <div class="prin-grid" id="principles"></div>
+  <div style="height:32px;"></div>
+</div>
+
+<!-- ========== DRAFT TRACKER PANEL ========== -->
+<div class="panel" id="p-draft">
+  <div class="callout-amber"><strong>Remember:</strong> Your $50 FAAB holdback is separate from this $250 draft budget. Don't mentally spend your FAAB during the auction.</div>
+
+  <div class="budget-block">
+    <div class="budget-metrics" id="bmet"></div>
+    <div class="budget-bar-outer">
+      <div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div>
+    </div>
+    <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
+    <div class="pos-pills" id="pos-pills"></div>
+  </div>
+
+  <div class="add-form-card">
+    <div class="form-title">Add player</div>
+    <div class="form-row">
+      <div class="fg"><label>Player name</label><input type="text" id="pn" placeholder="e.g. Brock Bowers"/></div>
+      <div class="fg"><label>Position</label>
+        <select id="pp"><option value="QB">QB</option><option value="WR">WR</option><option value="RB">RB</option><option value="TE">TE</option><option value="K">K</option><option value="DEF">DEF</option></select>
+      </div>
+      <div class="fg"><label>Age</label><input type="number" id="pa" min="18" max="42" placeholder="25"/></div>
+      <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
+      <div class="fg"><label>Contract</label>
+        <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
+      </div>
+      <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addP()">+ Add</button></div>
+    </div>
+  </div>
+
+  <div class="player-list-card" id="plist-wrap">
+    <div class="player-list-header">
+      <span>Player</span><span style="text-align:center;">Pos</span><span style="text-align:right;">Age</span>
+      <span style="text-align:right;">Salary</span><span style="text-align:right;">Contract</span>
+      <span style="text-align:right;">Cap/yr</span><span></span>
+    </div>
+    <div id="plist"><div class="empty-state">No players added yet — log your first pick above.</div></div>
+  </div>
+  <div style="height:32px;"></div>
+</div>
+
+<!-- ========== CONTRACT CALC PANEL ========== -->
+<div class="panel" id="p-calc">
+  <div class="callout">Model any bid before committing. The discount rewards longer deals; the dead money table below shows exactly what it costs to cut at each point of the contract.</div>
+  <div class="calc-top">
+    <div class="fg"><label>Salary bid ($/yr)</label><input type="number" id="cs" min="1" max="150" value="25" oninput="calc()"/></div>
+    <div class="fg"><label>Contract length</label>
+      <select id="cy" onchange="calc()">
+        <option value="1">1 year (no discount)</option>
+        <option value="2">2 years (−8%/yr)</option>
+        <option value="3">3 years (−16%/yr)</option>
+        <option value="4">4 years (−24%/yr)</option>
+      </select>
+    </div>
+    <div class="fg"><label>Player age</label><input type="number" id="ca" min="18" max="42" value="25" oninput="calc()"/></div>
+  </div>
+
+  <div class="calc-result-card">
+    <div class="calc-result-header" id="calc-header"></div>
+    <div class="calc-rows" id="calc-rows"></div>
+    <div class="calc-section-head">Dead money scenarios — if you cut this player</div>
+    <table class="dm-scenario-tbl"><thead><tr><th>Cut after</th><th>Years remaining</th><th>Dead cap (this yr)</th><th>Penalty (next yr)</th><th>Total exposure</th></tr></thead>
+    <tbody id="calc-dm-scenarios"></tbody></table>
+    <div id="calc-rec"></div>
+  </div>
+  <div style="height:32px;"></div>
+</div>
+
+<script>
+const DISC={1:0,2:.08,3:.16,4:.24};
+const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
+let players=[];
+
+const ALLOC=[
+  {pos:'QB (x2)',pct:.28,rng:'$62–76',color:'#3B82F6',note:'Superflex premium'},
+  {pos:'WR (x4+)',pct:.28,rng:'$60–75',color:'#00C97A',note:'3 starters + 2 FLEX'},
+  {pos:'RB (x3+)',pct:.20,rng:'$42–58',color:'#F5A623',note:'2 starters + FLEX'},
+  {pos:'TE (x1)',pct:.13,rng:'$25–38',color:'#E879B0',note:'TE premium boosts value'},
+  {pos:'Depth',pct:.07,rng:'$12–22',color:'#4A6080',note:'Bench + PS targets'},
+  {pos:'Reserve',pct:.04,rng:'$6–12',color:'#2A3D5C',note:"Never reach $0"},
+];
+
+const TIERS=[
+  {pos:'QB',t:'T1',lbl:'Elite',rng:'$40–60',con:'3–4 yrs',note:'Superflex scarcity — 24 QB starter spots league-wide'},
+  {pos:'QB',t:'T2',lbl:'Starter',rng:'$22–39',con:'2–3 yrs',note:'Every team needs 2; T2 QBs get bid up hard'},
+  {pos:'QB',t:'T3',lbl:'Backup',rng:'$5–21',con:'1–2 yrs',note:'Only worth it if young with real upside'},
+  {pos:'WR',t:'T1',lbl:'Elite',rng:'$38–56',con:'3–4 yrs',note:'True WR1 alpha, age ≤27 strongly preferred'},
+  {pos:'WR',t:'T2',lbl:'Starter',rng:'$18–37',con:'2–3 yrs',note:'Need 3 starters + 2 FLEX per roster'},
+  {pos:'WR',t:'T3',lbl:'Flex',rng:'$8–17',con:'2 yrs',note:'Volume + clear role is what matters'},
+  {pos:'WR',t:'T4',lbl:'Depth',rng:'$1–7',con:'1 yr',note:'PS candidate if within first 2 NFL years'},
+  {pos:'RB',t:'T1',lbl:'Elite',rng:'$30–46',con:'3–4 yrs',note:'Workhorse + age ≤26; value peaks early'},
+  {pos:'RB',t:'T2',lbl:'Starter',rng:'$14–29',con:'2–3 yrs',note:'Defined role and sufficient touch count'},
+  {pos:'RB',t:'T3',lbl:'Flex',rng:'$5–13',con:'1–2 yrs',note:'RBs decline fast — always keep contracts short'},
+  {pos:'RB',t:'T4',lbl:'Depth',rng:'$1–4',con:'1 yr',note:'Rookie/PS only — minimal commitment'},
+  {pos:'TE',t:'T1',lbl:'Elite',rng:'$28–44',con:'3–4 yrs',note:'1.0 PPR makes top TE a consistent weekly weapon'},
+  {pos:'TE',t:'T2',lbl:'Starter',rng:'$12–27',con:'2–3 yrs',note:'Clear starter with guaranteed target share'},
+  {pos:'TE',t:'T3',lbl:'Flier',rng:'$2–11',con:'1–2 yrs',note:'Upside play; great PS target if ≤2 NFL years'},
+];
+
+const PRIN=[
+  {icon:`<path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>`,title:"Don't force it early",body:"Let the first 3–5 players sell before spending big. Early frenzy inflates prices 30–40% above fair value — patience is your edge."},
+  {icon:`<circle cx="12" cy="8" r="4"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>`,title:'Superflex doubles QB demand',body:"12 teams × 2 starters = 24 QB spots. Top-12 QBs are premium assets — budget accordingly and don't get caught without two."},
+  {icon:`<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>`,title:'TE premium changes tiers',body:"1.0 PPR for TEs closes the scoring gap to WRs. An elite TE is worth $5–12 more here vs. standard. Don't sleep on top TEs."},
+  {icon:`<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,title:'Age drives contract length',body:"Age ≤24 → 4 yrs. Age 25–27 → 3 yrs. Age 28–29 → 2 yrs. Age 30+ → 1 yr max. Long deals on young players = maximum value."},
+  {icon:`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>`,title:'Nominate to inflate rivals',body:"Nominate players your rivals need to drain their budgets before your own targets hit the block. A core startup auction tactic."},
+  {icon:`<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>`,title:'Practice squad strategy',body:"PS players cost only 25% of salary — but only players in their first 2 NFL years qualify. Target young fliers at $1–3 for near-zero cap hits."},
+  {icon:`<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,title:'Dead money is graduated',body:"Cutting a player = 100% salary dead cap now + up to 100% next year if 5 years remain. The further from contract end, the worse the penalty."},
+  {icon:`<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>`,title:'Guard the FAAB $50',body:"Your $50 holdback is your only in-season free agent budget. Don't blow it all early — a mid-season injury wave can change everything."},
+];
+
+function sw(id,btn){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('on');
+}
+
+function buildAlloc(){
+  document.getElementById('alloc-tbl').innerHTML=ALLOC.map(a=>`
+    <div class="alloc-row">
+      <span class="alloc-pos">${a.pos}</span>
+      <div class="alloc-bar-wrap"><div class="alloc-bar" style="width:${Math.round(a.pct*100)}%;background:${a.color};"></div></div>
+      <span class="alloc-range">${a.rng}</span>
+      <span class="alloc-note">${a.note}</span>
+    </div>`).join('');
+}
+
+function buildTiers(){
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  const tc={T1:'t1',T2:'t2',T3:'t3',T4:'t4'};
+  document.getElementById('tier-body').innerHTML=TIERS.map(t=>`
+    <tr>
+      <td><span class="ptag ${pc[t.pos]}">${t.pos}</span></td>
+      <td><span class="tbadge ${tc[t.t]}">${t.lbl}</span></td>
+      <td style="font-family:var(--font-mono);font-weight:500;">${t.rng}</td>
+      <td style="color:var(--text2);font-family:var(--font-mono);font-size:12px;">${t.con}</td>
+      <td style="color:var(--text3);font-size:12px;">${t.note}</td>
+    </tr>`).join('');
+}
+
+function buildPrin(){
+  document.getElementById('principles').innerHTML=PRIN.map(p=>`
+    <div class="prin-card">
+      <div class="prin-head">
+        <div class="prin-icon"><svg viewBox="0 0 24 24">${p.icon}</svg></div>
+        <span class="prin-title">${p.title}</span>
+      </div>
+      <p class="prin-body">${p.body}</p>
+    </div>`).join('');
+}
+
+function updBudget(){
+  const spent=players.reduce((s,p)=>s+p.sal,0);
+  const rem=250-spent;
+  const pct=Math.max(0,rem/250*100);
+  const col=pct>30?'var(--green)':pct>15?'var(--amber)':'var(--red)';
+  document.getElementById('bbar').style.width=pct+'%';
+  document.getElementById('bbar').style.background=col;
+  document.getElementById('blbl').textContent='$'+rem+' remaining';
+  const more=Math.max(1,36-players.length);
+  const avg=players.length?Math.round(spent/players.length):0;
+  document.getElementById('bmet').innerHTML=`
+    <div class="bmet"><div class="bmet-label">Remaining</div><div class="bmet-value" style="color:${col}">$${rem}</div><div class="bmet-sub">of $250 budget</div></div>
+    <div class="bmet"><div class="bmet-label">Spent</div><div class="bmet-value">$${spent}</div><div class="bmet-sub">${players.length} players</div></div>
+    <div class="bmet"><div class="bmet-label">Avg salary</div><div class="bmet-value">$${avg||'—'}</div><div class="bmet-sub">per player</div></div>
+    <div class="bmet"><div class="bmet-label">$/spot left</div><div class="bmet-value">${rem>0?'$'+Math.round(rem/more):'—'}</div><div class="bmet-sub">~${more} spots left</div></div>`;
+  const cnts={};
+  const bcol={QB:'#1E3A6E',WR:'#0D3B2A',RB:'#3D2B00',TE:'#3B1240'};
+  const tcol={QB:'#60A5FA',WR:'#34D399',RB:'#FCD34D',TE:'#E879B0'};
+  players.forEach(p=>{cnts[p.pos]=(cnts[p.pos]||0)+1;});
+  document.getElementById('pos-pills').innerHTML=Object.entries(cnts).map(([pos,n])=>
+    `<span class="pos-pill" style="background:${bcol[pos]||'var(--card2)'};color:${tcol[pos]||'var(--text2)'};border-color:${tcol[pos]||'var(--border)'}33;">${pos}: ${n}</span>`).join('');
+  renderPlayers();
+}
+
+function renderPlayers(){
+  const el=document.getElementById('plist');
+  if(!players.length){
+    el.innerHTML='<div class="empty-state">No players added yet — log your first pick above.</div>';
+    return;
+  }
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  el.innerHTML=players.map((p,i)=>{
+    const d=DISC[p.yrs]||0;
+    const cap=(p.sal*(1-d)).toFixed(1);
+    return `<div class="player-row-item">
+      <span class="player-name-cell">${p.name}</span>
+      <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
+      <span class="player-cell">${p.age}</span>
+      <span class="player-cell bold">$${p.sal}</span>
+      <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
+      <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
+      <button class="del-btn" onclick="delP(${i})" aria-label="Remove player">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function addP(){
+  const name=document.getElementById('pn').value.trim();
+  const pos=document.getElementById('pp').value;
+  const age=parseInt(document.getElementById('pa').value)||25;
+  const sal=parseInt(document.getElementById('ps').value)||0;
+  const yrs=parseInt(document.getElementById('py').value)||1;
+  if(!name||!sal){document.getElementById('pn').focus();return;}
+  const spent=players.reduce((s,p)=>s+p.sal,0);
+  if(spent+sal>250){alert('Over budget! Only $'+(250-spent)+' remaining.');return;}
+  players.push({name,pos,age,sal,yrs});
+  document.getElementById('pn').value='';
+  document.getElementById('ps').value='';
+  document.getElementById('pa').value='';
+  updBudget();
+}
+function delP(i){players.splice(i,1);updBudget();}
+
+function dmPct(rem){return DM_PCT[Math.min(rem,5)]||0;}
+function dmColor(rem){return rem<=1?'var(--green)':rem===2?'var(--amber)':rem===3?'var(--amber)':'var(--red)';}
+
+function calc(){
+  const sal=parseFloat(document.getElementById('cs').value)||0;
+  const yrs=parseInt(document.getElementById('cy').value)||1;
+  const age=parseInt(document.getElementById('ca').value)||25;
+  const d=DISC[yrs]||0;
+  const cap=sal*(1-d);
+  const total=cap*yrs;
+
+  // Age/term recommendation
+  let rc='rec-green',rt='';
+  if(age<=24){
+    if(yrs>=3){rc='rec-green';rt='Excellent. Locking in a young player on a long deal is the foundation of dynasty — cost-controlled production through their prime years.';}
+    else{rc='rec-amber';rt='Consider going longer. Players ≤24 on 3–4 year deals offer maximum value in contract dynasty. Max the discount while they\'re young.';}
+  }else if(age<=27){
+    if(yrs<=3){rc='rec-green';rt='Solid fit — prime-age player on a sensible term. Strong value with manageable dead money exposure.';}
+    else{rc='rec-amber';rt='Caution: a 4-year deal carries this player to age '+(age+4)+'. That may enter decline territory. Check the dead money table before committing.';}
+  }else if(age<=30){
+    if(yrs<=2){rc='rec-green';rt='Reasonable for a late-prime veteran. Short term limits dead money exposure if performance drops off.';}
+    else{rc='rec-amber';rt='Caution: '+yrs+'-year deal on a '+age+'-year-old ends at age '+(age+yrs)+'. Cutting mid-contract hits hard with this dead money scale.';}
+  }else{
+    if(yrs===1){rc='rec-amber';rt='One year is the right call on a 30+ player. Still ask: is this the best use of cap, or does that money go further on a younger player?';}
+    else{rc='rec-red';rt='Warning: multi-year deal on a '+age+'-year-old is high-risk. If they decline, the graduated dead money scale compounds the pain each year you wait to cut.';}
+  }
+
+  document.getElementById('calc-header').innerHTML=`
+    <div class="calc-main-value">$${cap.toFixed(1)}<span style="font-size:22px;color:var(--text2);font-weight:400;">/yr</span></div>
+    <div class="calc-main-label">effective cap hit after ${Math.round(d*100)}% discount on ${yrs}-year deal</div>`;
+
+  document.getElementById('calc-rows').innerHTML=`
+    <div class="calc-row"><span class="calc-lbl">Salary bid (annual)</span><span class="calc-val">$${sal.toFixed(1)}</span></div>
+    <div class="calc-row"><span class="calc-lbl">Contract discount (${Math.round(d*100)}% for ${yrs}-yr deal)</span><span class="calc-val">−$${(sal*d).toFixed(1)}/yr</span></div>
+    <div class="calc-row"><span class="calc-lbl">Effective cap hit / year</span><span class="calc-val" style="color:var(--green);">$${cap.toFixed(1)}</span></div>
+    <div class="calc-row"><span class="calc-lbl">Total cap commitment (${yrs} yr)</span><span class="calc-val">$${total.toFixed(1)}</span></div>`;
+
+  // Dead money scenarios table
+  let rows='';
+  for(let cutAfter=1;cutAfter<yrs;cutAfter++){
+    const rem=yrs-cutAfter;
+    const pct=dmPct(rem);
+    const nextYr=(sal*pct).toFixed(1);
+    const total2=(sal+sal*pct).toFixed(1);
+    const col=dmColor(rem);
+    rows+=`<tr>
+      <td style="color:var(--text);">Year ${cutAfter}</td>
+      <td><span style="color:${col};">${rem} yr${rem>1?'s':''} left</span></td>
+      <td style="color:var(--red);">$${sal.toFixed(1)}</td>
+      <td style="color:${col};">$${nextYr} <span style="color:var(--text3);font-size:11px;">(${Math.round(pct*100)}%)</span></td>
+      <td style="color:${col};font-weight:500;">$${total2}</td>
+    </tr>`;
+  }
+  if(!rows) rows=`<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px 20px;">1-year deal — no future dead money penalty if cut.</td></tr>`;
+  document.getElementById('calc-dm-scenarios').innerHTML=rows;
+  document.getElementById('calc-rec').innerHTML=`<div class="rec-block ${rc}" style="margin-top:4px;">${rt}</div>`;
+}
+
+buildAlloc();buildTiers();buildPrin();updBudget();calc();
+</script>
+</body>
+</html>
