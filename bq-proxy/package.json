@@ -1,0 +1,12 @@
+{
+  "name": "dynasty-tycoon-bq-proxy",
+  "version": "1.0.0",
+  "description": "BigQuery streaming insert proxy for Dynasty Tycoon draft tracker",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.9.0"
+  }
+}
