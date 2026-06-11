@@ -12,8 +12,35 @@ exports.draftPicksInsert = async (req, res) => {
 
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
 
-  // ── GET — load all picks on page load ────────────────────────────────────
+  // ── GET — load all picks on page load, or player roster ──────────────────
   if (req.method === 'GET') {
+    // ?roster=1  →  returns eligible player list from nflreadpy
+    if (req.query.roster === '1') {
+      try {
+        const [rows] = await bq.query({
+          query: `
+            SELECT
+              gsis_id,
+              display_name,
+              position,
+              CAST(FLOOR(age) AS INT64) AS age,
+              latest_team
+            FROM \`${PROJECT}.nflreadpy.players\`
+            WHERE position IN ('QB','WR','RB','TE')
+              AND last_season >= 2023
+              AND display_name IS NOT NULL
+            ORDER BY display_name ASC
+          `,
+        });
+        res.status(200).json({ players: rows });
+      } catch (err) {
+        console.error('Roster load error:', err);
+        res.status(500).json({ error: 'Failed to load roster', message: err.message });
+      }
+      return;
+    }
+
+    // default: load existing draft picks
     try {
       const [rows] = await bq.query({
         query: `SELECT * FROM \`${PROJECT}.${DATASET}.${TABLE}\` ORDER BY drafted_at ASC`,
