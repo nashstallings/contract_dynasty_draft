@@ -395,15 +395,36 @@ const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
 let players=[];
 
 // ── BigQuery config ───────────────────────────────────────────────────────────
-// Replace with your deployed Cloud Function URL after running the deploy command
 const BQ_URL = 'https://contract-dynasty-draft-845964113753.europe-west1.run.app';
 
+// Load all existing picks from BQ on page load
+async function loadFromBQ() {
+  showBQStatus('loading');
+  try {
+    const resp = await fetch(BQ_URL, { method: 'GET' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    players = (data.picks || []).map(r => ({
+      pick_id: r.pick_id,
+      name:    r.player_name,
+      pos:     r.position,
+      age:     r.age,
+      sal:     r.salary,
+      yrs:     r.contract_yrs,
+    }));
+    updBudget();
+    showBQStatus('loaded');
+  } catch (err) {
+    console.error('BQ load failed:', err);
+    showBQStatus('error');
+  }
+}
+
 async function writeToBQ(player) {
-  if (!BQ_URL || BQ_URL === 'YOUR_CLOUD_FUNCTION_URL') return;
   const discount = DISC[player.yrs] || 0;
   const cap = player.sal * (1 - discount);
   const row = {
-    pick_id:          crypto.randomUUID(),
+    pick_id:          player.pick_id,
     drafted_at:       new Date().toISOString(),
     player_name:      player.name,
     position:         player.pos,
@@ -421,6 +442,14 @@ async function writeToBQ(player) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(row)
     });
+    if (resp.status === 409) {
+      const data = await resp.json();
+      // Remove the optimistically added player
+      players = players.filter(p => p.pick_id !== player.pick_id);
+      updBudget();
+      showBQStatus('duplicate', data.message);
+      return;
+    }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     showBQStatus('saved');
   } catch (err) {
@@ -429,19 +458,37 @@ async function writeToBQ(player) {
   }
 }
 
-function showBQStatus(state) {
+async function deleteFromBQ(pick_id) {
+  try {
+    const resp = await fetch(BQ_URL, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pick_id })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  } catch (err) {
+    console.error('BQ delete failed:', err);
+  }
+}
+
+function showBQStatus(state, msg) {
   const el = document.getElementById('bq-status');
   if (!el) return;
   const map = {
-    saving: { text: '● Saving to BigQuery…', color: 'var(--amber)' },
-    saved:  { text: '✓ Saved to BigQuery',   color: 'var(--green)' },
-    error:  { text: '✕ BigQuery write failed', color: 'var(--red)' }
+    loading:   { text: '● Loading roster…',         color: 'var(--text2)' },
+    loaded:    { text: '✓ Roster loaded',            color: 'var(--green)' },
+    saving:    { text: '● Saving to BigQuery…',      color: 'var(--amber)' },
+    saved:     { text: '✓ Saved to BigQuery',        color: 'var(--green)' },
+    duplicate: { text: `✕ ${msg || 'Already drafted'}`, color: 'var(--amber)' },
+    error:     { text: '✕ BigQuery error',           color: 'var(--red)' }
   };
-  const s = map[state];
+  const s = map[state] || map.error;
   el.textContent = s.text;
   el.style.color = s.color;
   el.style.opacity = '1';
-  if (state !== 'saving') setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  if (state !== 'saving' && state !== 'loading') {
+    setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  }
 }
 
 const ALLOC=[
@@ -577,9 +624,14 @@ function addP(){
   const sal=parseInt(document.getElementById('ps').value)||0;
   const yrs=parseInt(document.getElementById('py').value)||1;
   if(!name||!sal){document.getElementById('pn').focus();return;}
+  // Client-side duplicate check
+  if(players.some(p=>p.name.toLowerCase()===name.toLowerCase())){
+    showBQStatus('duplicate',`${name} is already drafted`);
+    return;
+  }
   const spent=players.reduce((s,p)=>s+p.sal,0);
   if(spent+sal>250){alert('Over budget! Only $'+(250-spent)+' remaining.');return;}
-  const player={name,pos,age,sal,yrs};
+  const player={pick_id:crypto.randomUUID(),name,pos,age,sal,yrs};
   players.push(player);
   writeToBQ(player);
   document.getElementById('pn').value='';
@@ -587,7 +639,12 @@ function addP(){
   document.getElementById('pa').value='';
   updBudget();
 }
-function delP(i){players.splice(i,1);updBudget();}
+async function delP(i){
+  const player=players[i];
+  players.splice(i,1);
+  updBudget();
+  if(player.pick_id) await deleteFromBQ(player.pick_id);
+}
 
 function dmPct(rem){return DM_PCT[Math.min(rem,5)]||0;}
 function dmColor(rem){return rem<=1?'var(--green)':rem===2?'var(--amber)':rem===3?'var(--amber)':'var(--red)';}
@@ -647,7 +704,7 @@ function calc(){
   document.getElementById('calc-rec').innerHTML=`<div class="rec-block ${rc}" style="margin-top:4px;">${rt}</div>`;
 }
 
-buildAlloc();buildTiers();buildPrin();updBudget();calc();
+buildAlloc();buildTiers();buildPrin();updBudget();calc();loadFromBQ();
 </script>
 </body>
 </html>
