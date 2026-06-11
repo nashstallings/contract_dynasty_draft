@@ -399,7 +399,7 @@ let players=[];
 const BQ_URL = 'https://contract-dynasty-draft-845964113753.europe-west1.run.app';
 
 async function writeToBQ(player) {
-  if (!BQ_URL || BQ_URL === 'https://contract-dynasty-draft-845964113753.europe-west1.run.app') return;
+  if (!BQ_URL || BQ_URL === 'YOUR_CLOUD_FUNCTION_URL') return;
   const discount = DISC[player.yrs] || 0;
   const cap = player.sal * (1 - discount);
   const row = {
