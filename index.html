@@ -167,6 +167,24 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .del-btn:hover{color:var(--red);background:var(--red-dim);}
 .empty-state{padding:40px 24px;text-align:center;color:var(--text3);font-size:13px;}
 
+/* PLAYER TYPEAHEAD */
+.player-search-wrap{position:relative;flex:1;}
+.player-search-wrap input{width:100%;}
+.player-autofill{display:flex;gap:8px;margin-top:6px;min-height:20px;align-items:center;}
+.autofill-badge{font-family:var(--font-mono);font-size:11px;padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+.autofill-badge.filled{background:var(--green-dim);border:1px solid var(--green-mid);color:var(--green);}
+.autofill-badge.empty{background:var(--card2);border:1px solid var(--border);color:var(--text3);}
+.typeahead-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:8px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px #00000055;display:none;}
+.typeahead-dropdown.open{display:block;}
+.td-item{padding:9px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);transition:background .12s;}
+.td-item:last-child{border-bottom:none;}
+.td-item:hover,.td-item.active{background:var(--card2);}
+.td-item-name{flex:1;color:var(--text);font-weight:500;}
+.td-item-team{font-family:var(--font-mono);font-size:11px;color:var(--text3);}
+.td-item-age{font-family:var(--font-mono);font-size:11px;color:var(--text2);width:36px;text-align:right;}
+.td-empty{padding:12px 14px;font-size:12px;color:var(--text3);text-align:center;}
+.form-row-new{display:grid;grid-template-columns:1fr 90px 130px auto;gap:10px;align-items:end;}
+
 /* CONTRACT CALC */
 .calc-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
 .calc-result-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
@@ -334,12 +352,19 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
   <div class="add-form-card">
     <div class="form-title">Add player</div>
-    <div class="form-row">
-      <div class="fg"><label>Player name</label><input type="text" id="pn" placeholder="e.g. Brock Bowers"/></div>
-      <div class="fg"><label>Position</label>
-        <select id="pp"><option value="QB">QB</option><option value="WR">WR</option><option value="RB">RB</option><option value="TE">TE</option><option value="K">K</option><option value="DEF">DEF</option></select>
+    <div class="form-row-new">
+      <div class="fg">
+        <label>Player name</label>
+        <div class="player-search-wrap">
+          <input type="text" id="pn" placeholder="Search by name…" autocomplete="off" oninput="onPlayerSearch(this.value)" onkeydown="onSearchKey(event)"/>
+          <div class="typeahead-dropdown" id="td"></div>
+        </div>
+        <div class="player-autofill" id="autofill-row">
+          <span class="autofill-badge empty" id="af-pos">Pos —</span>
+          <span class="autofill-badge empty" id="af-age">Age —</span>
+          <span class="autofill-badge empty" id="af-team">Team —</span>
+        </div>
       </div>
-      <div class="fg"><label>Age</label><input type="number" id="pa" min="18" max="42" placeholder="25"/></div>
       <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
       <div class="fg"><label>Contract</label>
         <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
@@ -393,6 +418,9 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 const DISC={1:0,2:.08,3:.16,4:.24};
 const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
 let players=[];
+let rosterList=[];       // full player list from BQ
+let selectedPlayer=null; // currently chosen player from typeahead
+let tdActiveIdx=-1;      // keyboard nav index in dropdown
 
 // ── BigQuery config ───────────────────────────────────────────────────────────
 const BQ_URL = 'https://contract-dynasty-draft-845964113753.europe-west1.run.app';
@@ -419,6 +447,110 @@ async function loadFromBQ() {
     showBQStatus('error');
   }
 }
+
+async function loadRoster() {
+  try {
+    const resp = await fetch(BQ_URL + '?roster=1', { method: 'GET' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    rosterList = data.players || [];
+  } catch (err) {
+    console.error('Roster load failed:', err);
+  }
+}
+
+// ── Typeahead logic ────────────────────────────────────────────────────────
+function onPlayerSearch(val) {
+  selectedPlayer = null;
+  setAutofill(null);
+  const q = val.trim().toLowerCase();
+  const td = document.getElementById('td');
+  if (!q || q.length < 1) { td.classList.remove('open'); return; }
+  const already = new Set(players.map(p => p.name.toLowerCase()));
+  const matches = rosterList
+    .filter(p => p.display_name.toLowerCase().includes(q) && !already.has(p.display_name.toLowerCase()))
+    .slice(0, 40);
+  if (!matches.length) {
+    td.innerHTML = '<div class="td-empty">No players found</div>';
+    td.classList.add('open');
+    tdActiveIdx = -1;
+    return;
+  }
+  tdActiveIdx = -1;
+  const pc = {QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  td.innerHTML = matches.map((p, i) =>
+    `<div class="td-item" data-idx="${i}" onmousedown="selectPlayer(${i})" onmouseover="setTdActive(${i})">
+      <span class="ptag ${pc[p.position]||''}" style="flex-shrink:0;">${p.position}</span>
+      <span class="td-item-name">${p.display_name}</span>
+      <span class="td-item-team">${p.latest_team||''}</span>
+      <span class="td-item-age">${p.age != null ? p.age+'y' : '—'}</span>
+    </div>`
+  ).join('');
+  td._matches = matches;
+  td.classList.add('open');
+}
+
+function setTdActive(i) {
+  tdActiveIdx = i;
+  document.querySelectorAll('.td-item').forEach((el,j) => el.classList.toggle('active', j===i));
+}
+
+function selectPlayer(i) {
+  const td = document.getElementById('td');
+  const matches = td._matches || [];
+  const p = matches[i];
+  if (!p) return;
+  selectedPlayer = p;
+  document.getElementById('pn').value = p.display_name;
+  td.classList.remove('open');
+  setAutofill(p);
+  document.getElementById('ps').focus();
+}
+
+function setAutofill(p) {
+  const afPos  = document.getElementById('af-pos');
+  const afAge  = document.getElementById('af-age');
+  const afTeam = document.getElementById('af-team');
+  if (!p) {
+    afPos.textContent  = 'Pos —';  afPos.className  = 'autofill-badge empty';
+    afAge.textContent  = 'Age —';  afAge.className  = 'autofill-badge empty';
+    afTeam.textContent = 'Team —'; afTeam.className = 'autofill-badge empty';
+    return;
+  }
+  afPos.textContent  = p.position;             afPos.className  = 'autofill-badge filled';
+  afAge.textContent  = p.age != null ? p.age+'y' : 'Age —'; afAge.className  = 'autofill-badge filled';
+  afTeam.textContent = p.latest_team || '—';   afTeam.className = 'autofill-badge filled';
+}
+
+function onSearchKey(e) {
+  const td = document.getElementById('td');
+  if (!td.classList.contains('open')) return;
+  const items = td.querySelectorAll('.td-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    tdActiveIdx = Math.min(tdActiveIdx + 1, items.length - 1);
+    setTdActive(tdActiveIdx);
+    items[tdActiveIdx].scrollIntoView({block:'nearest'});
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    tdActiveIdx = Math.max(tdActiveIdx - 1, 0);
+    setTdActive(tdActiveIdx);
+    items[tdActiveIdx].scrollIntoView({block:'nearest'});
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (tdActiveIdx >= 0) selectPlayer(tdActiveIdx);
+  } else if (e.key === 'Escape') {
+    td.classList.remove('open');
+  }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.player-search-wrap')) {
+    document.getElementById('td').classList.remove('open');
+  }
+});
 
 async function writeToBQ(player) {
   const discount = DISC[player.yrs] || 0;
@@ -619,13 +751,13 @@ function renderPlayers(){
 }
 
 function addP(){
-  const name=document.getElementById('pn').value.trim();
-  const pos=document.getElementById('pp').value;
-  const age=parseInt(document.getElementById('pa').value)||25;
+  if(!selectedPlayer){document.getElementById('pn').focus();showBQStatus('error','Select a player from the list');return;}
+  const name=selectedPlayer.display_name;
+  const pos=selectedPlayer.position;
+  const age=selectedPlayer.age!=null?parseInt(selectedPlayer.age):null;
   const sal=parseInt(document.getElementById('ps').value)||0;
   const yrs=parseInt(document.getElementById('py').value)||1;
-  if(!name||!sal){document.getElementById('pn').focus();return;}
-  // Client-side duplicate check
+  if(!sal){document.getElementById('ps').focus();return;}
   if(players.some(p=>p.name.toLowerCase()===name.toLowerCase())){
     showBQStatus('duplicate',`${name} is already drafted`);
     return;
@@ -637,7 +769,8 @@ function addP(){
   writeToBQ(player);
   document.getElementById('pn').value='';
   document.getElementById('ps').value='';
-  document.getElementById('pa').value='';
+  selectedPlayer=null;
+  setAutofill(null);
   updBudget();
 }
 async function delP(i){
@@ -705,7 +838,7 @@ function calc(){
   document.getElementById('calc-rec').innerHTML=`<div class="rec-block ${rc}" style="margin-top:4px;">${rt}</div>`;
 }
 
-buildAlloc();buildTiers();buildPrin();updBudget();calc();loadFromBQ();
+buildAlloc();buildTiers();buildPrin();updBudget();calc();loadFromBQ();loadRoster();
 </script>
 </body>
 </html>
