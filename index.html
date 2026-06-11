@@ -408,9 +408,9 @@ async function loadFromBQ() {
       pick_id: r.pick_id,
       name:    r.player_name,
       pos:     r.position,
-      age:     r.age,
-      sal:     r.salary,
-      yrs:     r.contract_yrs,
+      age:     parseInt(r.age) || 25,
+      sal:     parseFloat(r.salary),
+      yrs:     parseInt(r.contract_yrs),
     }));
     updBudget();
     showBQStatus('loaded');
@@ -533,6 +533,7 @@ function sw(id,btn){
   btn.classList.add('on');
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('on');
+  if(id==='draft') updBudget();
 }
 
 function buildAlloc(){
