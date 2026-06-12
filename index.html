@@ -225,6 +225,17 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-proj-val{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text);}
 .eval-proj-empty{color:var(--text3);font-weight:400;}
 
+/* YPRR section */
+.eval-yprr-section{margin-top:16px;}
+.eval-yprr-header{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;}
+.eval-yprr-title{font-family:var(--font-head);font-size:14px;font-weight:700;letter-spacing:.5px;color:var(--text);}
+.eval-yprr-sub{font-family:var(--font-mono);font-size:10px;color:var(--text3);}
+.eval-yprr-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.eval-yprr-kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
+.eval-yprr-kpi-val{font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green);line-height:1;}
+.eval-yprr-kpi-lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-top:3px;}
+.eval-yprr-chart-wrap{position:relative;height:140px;}
+
 /* CONTRACT CALC */
 .calc-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
 .calc-result-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
@@ -469,6 +480,16 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="eval-card-title">Weekly Fantasy Points <span class="eval-card-sub">(0.5 PPR + TE premium · 2025 REG)</span></div>
       <div class="eval-chart-wrap" id="eval-chart-wrap">
         <canvas id="eval-chart"></canvas>
+      </div>
+      <div class="eval-yprr-section" id="eval-yprr-section" style="display:none;">
+        <div class="eval-yprr-header">
+          <span class="eval-yprr-title">Yards Per Route Run</span>
+          <span class="eval-yprr-sub">PFR · 2025 REG</span>
+        </div>
+        <div class="eval-yprr-kpis" id="eval-yprr-kpis"></div>
+        <div class="eval-yprr-chart-wrap">
+          <canvas id="eval-yprr-chart"></canvas>
+        </div>
       </div>
     </div>
 
@@ -995,6 +1016,7 @@ function renderEvalPlayer(p,data){
   ).join('');
 
   drawEvalChart(weekly);
+  renderYprr(pos, data.yprr_weekly || [], data.yprr_season || null);
 
   const tiers=TIERS.filter(t=>t.pos===pos);
   const draftedSal=drafted?drafted.sal:null;
@@ -1048,6 +1070,86 @@ function drawEvalChart(weekly){
       scales:{
         x:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}}},
         y:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}},beginAtZero:true},
+      }
+    }
+  });
+}
+
+function renderYprr(pos, weekly, season) {
+  const section = document.getElementById('eval-yprr-section');
+  // Only show for WR and TE
+  if (pos !== 'WR' && pos !== 'TE') { section.style.display = 'none'; return; }
+  if (!weekly || weekly.length === 0) { section.style.display = 'none'; return; }
+
+  section.style.display = 'block';
+
+  // KPI badges
+  const yprr  = season && season.yprr   != null ? Number(season.yprr).toFixed(2)    : '—';
+  const routes = season && season.routes_run != null ? Math.round(season.routes_run) : '—';
+  const adot   = season && season.adot   != null ? Number(season.adot).toFixed(1)    : '—';
+  const dropPct = season && season.drop_pct != null ? (Number(season.drop_pct)*100).toFixed(1)+'%' : '—';
+
+  // Color-code YPRR: elite ≥2.0, good ≥1.4, average ≥0.9
+  const yprrNum = season ? parseFloat(season.yprr) : null;
+  const yprrColor = yprrNum == null ? 'var(--text3)'
+    : yprrNum >= 2.0 ? 'var(--green)'
+    : yprrNum >= 1.4 ? 'var(--amber)'
+    : 'var(--red)';
+
+  document.getElementById('eval-yprr-kpis').innerHTML = `
+    <div class="eval-yprr-kpi">
+      <div class="eval-yprr-kpi-val" style="color:${yprrColor};">${yprr}</div>
+      <div class="eval-yprr-kpi-lbl">YPRR (season)</div>
+    </div>
+    <div class="eval-yprr-kpi">
+      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${routes}</div>
+      <div class="eval-yprr-kpi-lbl">Routes run</div>
+    </div>
+    <div class="eval-yprr-kpi">
+      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${adot}</div>
+      <div class="eval-yprr-kpi-lbl">aDOT (avg)</div>
+    </div>
+    <div class="eval-yprr-kpi">
+      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${dropPct}</div>
+      <div class="eval-yprr-kpi-lbl">Drop %</div>
+    </div>`;
+
+  drawYprrChart(weekly);
+}
+
+let yprrChart = null;
+function drawYprrChart(weekly) {
+  if (yprrChart) { yprrChart.destroy(); yprrChart = null; }
+  if (!weekly || !weekly.length) return;
+
+  const ctx = document.getElementById('eval-yprr-chart').getContext('2d');
+  const vals = weekly.map(w => w.yprr != null ? +Number(w.yprr).toFixed(2) : 0);
+  const avg  = vals.reduce((a,b) => a+b, 0) / vals.length;
+
+  yprrChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weekly.map(w => 'Wk ' + w.week),
+      datasets: [{
+        data: vals,
+        backgroundColor: vals.map(v => v >= avg ? 'rgba(0,201,122,0.7)' : 'rgba(74,96,128,0.45)'),
+        borderColor:     vals.map(v => v >= avg ? 'rgba(0,201,122,1)'   : 'rgba(74,96,128,0.7)'),
+        borderWidth: 1, borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: c => c.parsed.y.toFixed(2) + ' yds/route' },
+          backgroundColor: 'rgba(15,25,40,0.95)', titleColor: '#fff',
+          bodyColor: '#a0b0c8', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#7A90AE', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#7A90AE', font: { size: 10 } }, beginAtZero: true },
       }
     }
   });
