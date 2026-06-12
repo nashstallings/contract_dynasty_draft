@@ -187,6 +187,44 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .form-row-new .fg{display:flex;flex-direction:column;justify-content:flex-end;}
 .form-autofill-row{display:flex;gap:8px;margin-top:8px;min-height:22px;align-items:center;}
 
+/* PLAYER EVAL */
+.eval-search-wrap{display:flex;align-items:flex-end;gap:20px;margin-bottom:24px;}
+.eval-status{font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;color:var(--text3);padding-bottom:12px;}
+.eval-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:60px 24px;color:var(--text3);font-size:13px;text-align:center;}
+.eval-profile{display:flex;align-items:flex-start;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px;}
+.eval-profile-left{display:flex;flex-direction:column;gap:6px;}
+.eval-name{font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--text);letter-spacing:-.5px;}
+.eval-meta{font-family:var(--font-mono);font-size:12px;color:var(--text3);letter-spacing:.5px;}
+.eval-profile-badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:flex-start;}
+.eval-pbadge{font-family:var(--font-mono);font-size:11px;padding:5px 14px;border-radius:20px;border:1px solid var(--border2);color:var(--text2);background:var(--surface);}
+.eval-pbadge.highlight{background:var(--green-dim);border-color:var(--green-mid);color:var(--green);}
+.eval-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.eval-stat-cell{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.eval-stat-val{font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--text);line-height:1;}
+.eval-stat-val.green{color:var(--green);}
+.eval-stat-lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-top:5px;}
+.eval-stat-sub{font-family:var(--font-mono);font-size:11px;color:var(--text2);margin-top:3px;}
+.eval-lower{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;}
+.eval-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+.eval-card-title{font-family:var(--font-head);font-size:14px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:14px;}
+.eval-card-sub{font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;}
+.eval-chart-wrap{position:relative;height:160px;}
+.eval-contract-body{display:flex;flex-direction:column;gap:8px;}
+.eval-tier-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:7px;border:1px solid var(--border);}
+.eval-tier-row.active{border-color:var(--green-mid);background:var(--green-dim);}
+.eval-tier-lbl{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--text);}
+.eval-tier-range{font-family:var(--font-mono);font-size:12px;color:var(--green);}
+.eval-tier-note{font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:2px;}
+.eval-drafted-row{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;}
+.eval-drafted-lbl{font-family:var(--font-mono);font-size:11px;color:var(--text3);}
+.eval-drafted-val{font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--amber);}
+.eval-proj-placeholder{display:flex;flex-direction:column;gap:6px;}
+.eval-proj-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.eval-proj-row:last-child{border-bottom:none;}
+.eval-proj-lbl{font-family:var(--font-mono);font-size:11px;color:var(--text3);}
+.eval-proj-val{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text);}
+.eval-proj-empty{color:var(--text3);font-weight:400;}
+
 /* CONTRACT CALC */
 .calc-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
 .calc-result-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
@@ -223,6 +261,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -268,7 +307,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
   <button class="tab-btn" onclick="sw('draft',this)">Draft Tracker</button>
-  <button class="tab-btn" onclick="sw('calc',this)">Contract Calc</button>
+  <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
 </div>
 <div class="tab-divider"></div>
 
@@ -391,29 +430,63 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 <!-- ========== CONTRACT CALC PANEL ========== -->
 <div class="panel" id="p-calc">
-  <div class="callout">Model any bid before committing. The discount rewards longer deals; the dead money table below shows exactly what it costs to cut at each point of the contract.</div>
-  <div class="calc-top">
-    <div class="fg"><label>Salary bid ($/yr)</label><input type="number" id="cs" min="1" max="150" value="25" oninput="calc()"/></div>
-    <div class="fg"><label>Contract length</label>
-      <select id="cy" onchange="calc()">
-        <option value="1">1 year (no discount)</option>
-        <option value="2">2 years (−8%/yr)</option>
-        <option value="3">3 years (−16%/yr)</option>
-        <option value="4">4 years (−24%/yr)</option>
-      </select>
+
+  <!-- Search bar -->
+  <div class="eval-search-wrap">
+    <div class="fg" style="max-width:440px;">
+      <label>Search player</label>
+      <div class="player-search-wrap">
+        <input type="text" id="eval-pn" placeholder="Search by name…" autocomplete="off"
+          oninput="onEvalSearch(this.value)" onkeydown="onEvalKey(event)"/>
+        <div class="typeahead-dropdown" id="eval-td"></div>
+      </div>
     </div>
-    <div class="fg"><label>Player age</label><input type="number" id="ca" min="18" max="42" value="25" oninput="calc()"/></div>
+    <div id="eval-status" class="eval-status"></div>
   </div>
 
-  <div class="calc-result-card">
-    <div class="calc-result-header" id="calc-header"></div>
-    <div class="calc-rows" id="calc-rows"></div>
-    <div class="calc-section-head">Dead money scenarios — if you cut this player</div>
-    <table class="dm-scenario-tbl"><thead><tr><th>Cut after</th><th>Years remaining</th><th>Dead cap (this yr)</th><th>Penalty (next yr)</th><th>Total exposure</th></tr></thead>
-    <tbody id="calc-dm-scenarios"></tbody></table>
-    <div id="calc-rec"></div>
+  <!-- Empty / loading state -->
+  <div id="eval-empty" class="eval-empty-state">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <div>Search for a player to load their stats and contract value</div>
   </div>
-  <div style="height:32px;"></div>
+
+  <!-- Player profile header (hidden until loaded) -->
+  <div id="eval-profile" class="eval-profile" style="display:none;">
+    <div class="eval-profile-left">
+      <div class="eval-name" id="eval-name">—</div>
+      <div class="eval-meta" id="eval-meta">—</div>
+    </div>
+    <div class="eval-profile-badges" id="eval-badges"></div>
+  </div>
+
+  <!-- Stat grid (hidden until loaded) -->
+  <div id="eval-stats-grid" class="eval-stats-grid" style="display:none;"></div>
+
+  <!-- Two column: weekly chart + contract value -->
+  <div id="eval-lower" class="eval-lower" style="display:none;">
+
+    <div class="eval-card">
+      <div class="eval-card-title">Weekly Fantasy Points <span class="eval-card-sub">(0.5 PPR + TE premium · 2025 REG)</span></div>
+      <div class="eval-chart-wrap" id="eval-chart-wrap">
+        <canvas id="eval-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="eval-card">
+      <div class="eval-card-title">Contract Value <span class="eval-card-sub">(Dynasty Tycoon range)</span></div>
+      <div id="eval-contract-body" class="eval-contract-body"></div>
+      <div class="eval-card-title" style="margin-top:18px;">2026 Projections <span class="eval-card-sub">(coming soon)</span></div>
+      <div class="eval-proj-placeholder" id="eval-proj">
+        <div class="eval-proj-row"><span class="eval-proj-lbl">Fantasy Pts (proj)</span><span class="eval-proj-val eval-proj-empty">—</span></div>
+        <div class="eval-proj-row"><span class="eval-proj-lbl">Rank (pos)</span><span class="eval-proj-val eval-proj-empty">—</span></div>
+        <div class="eval-proj-row"><span class="eval-proj-lbl">ADP</span><span class="eval-proj-val eval-proj-empty">—</span></div>
+        <div class="eval-proj-row"><span class="eval-proj-lbl">Opportunity share</span><span class="eval-proj-val eval-proj-empty">—</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="height:40px;"></div>
 </div>
 
 <script>
@@ -785,62 +858,202 @@ async function delP(i){
 function dmPct(rem){return DM_PCT[Math.min(rem,5)]||0;}
 function dmColor(rem){return rem<=1?'var(--green)':rem===2?'var(--amber)':rem===3?'var(--amber)':'var(--red)';}
 
-function calc(){
-  const sal=parseFloat(document.getElementById('cs').value)||0;
-  const yrs=parseInt(document.getElementById('cy').value)||1;
-  const age=parseInt(document.getElementById('ca').value)||25;
-  const d=DISC[yrs]||0;
-  const cap=sal*(1-d);
-  const total=cap*yrs;
+// ── Player Eval tab ────────────────────────────────────────────────────────────
+let evalActiveIdx=-1;
+let evalChart=null;
 
-  // Age/term recommendation
-  let rc='rec-green',rt='';
-  if(age<=24){
-    if(yrs>=3){rc='rec-green';rt='Excellent. Locking in a young player on a long deal is the foundation of dynasty — cost-controlled production through their prime years.';}
-    else{rc='rec-amber';rt='Consider going longer. Players ≤24 on 3–4 year deals offer maximum value in contract dynasty. Max the discount while they\'re young.';}
-  }else if(age<=27){
-    if(yrs<=3){rc='rec-green';rt='Solid fit — prime-age player on a sensible term. Strong value with manageable dead money exposure.';}
-    else{rc='rec-amber';rt='Caution: a 4-year deal carries this player to age '+(age+4)+'. That may enter decline territory. Check the dead money table before committing.';}
-  }else if(age<=30){
-    if(yrs<=2){rc='rec-green';rt='Reasonable for a late-prime veteran. Short term limits dead money exposure if performance drops off.';}
-    else{rc='rec-amber';rt='Caution: '+yrs+'-year deal on a '+age+'-year-old ends at age '+(age+yrs)+'. Cutting mid-contract hits hard with this dead money scale.';}
-  }else{
-    if(yrs===1){rc='rec-amber';rt='One year is the right call on a 30+ player. Still ask: is this the best use of cap, or does that money go further on a younger player?';}
-    else{rc='rec-red';rt='Warning: multi-year deal on a '+age+'-year-old is high-risk. If they decline, the graduated dead money scale compounds the pain each year you wait to cut.';}
+function onEvalSearch(val){
+  evalActiveIdx=-1;
+  const q=val.trim().toLowerCase();
+  const td=document.getElementById('eval-td');
+  if(!q){td.classList.remove('open');return;}
+  const matches=rosterList.filter(p=>p.display_name.toLowerCase().includes(q)).slice(0,40);
+  if(!matches.length){
+    td.innerHTML='<div class="td-empty">No players found</div>';
+    td.classList.add('open');return;
   }
-
-  document.getElementById('calc-header').innerHTML=`
-    <div class="calc-main-value">$${cap.toFixed(1)}<span style="font-size:22px;color:var(--text2);font-weight:400;">/yr</span></div>
-    <div class="calc-main-label">effective cap hit after ${Math.round(d*100)}% discount on ${yrs}-year deal</div>`;
-
-  document.getElementById('calc-rows').innerHTML=`
-    <div class="calc-row"><span class="calc-lbl">Salary bid (annual)</span><span class="calc-val">$${sal.toFixed(1)}</span></div>
-    <div class="calc-row"><span class="calc-lbl">Contract discount (${Math.round(d*100)}% for ${yrs}-yr deal)</span><span class="calc-val">−$${(sal*d).toFixed(1)}/yr</span></div>
-    <div class="calc-row"><span class="calc-lbl">Effective cap hit / year</span><span class="calc-val" style="color:var(--green);">$${cap.toFixed(1)}</span></div>
-    <div class="calc-row"><span class="calc-lbl">Total cap commitment (${yrs} yr)</span><span class="calc-val">$${total.toFixed(1)}</span></div>`;
-
-  // Dead money scenarios table
-  let rows='';
-  for(let cutAfter=1;cutAfter<yrs;cutAfter++){
-    const rem=yrs-cutAfter;
-    const pct=dmPct(rem);
-    const nextYr=(sal*pct).toFixed(1);
-    const total2=(sal+sal*pct).toFixed(1);
-    const col=dmColor(rem);
-    rows+=`<tr>
-      <td style="color:var(--text);">Year ${cutAfter}</td>
-      <td><span style="color:${col};">${rem} yr${rem>1?'s':''} left</span></td>
-      <td style="color:var(--red);">$${sal.toFixed(1)}</td>
-      <td style="color:${col};">$${nextYr} <span style="color:var(--text3);font-size:11px;">(${Math.round(pct*100)}%)</span></td>
-      <td style="color:${col};font-weight:500;">$${total2}</td>
-    </tr>`;
-  }
-  if(!rows) rows=`<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px 20px;">1-year deal — no future dead money penalty if cut.</td></tr>`;
-  document.getElementById('calc-dm-scenarios').innerHTML=rows;
-  document.getElementById('calc-rec').innerHTML=`<div class="rec-block ${rc}" style="margin-top:4px;">${rt}</div>`;
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  td.innerHTML=matches.map((p,i)=>
+    `<div class="td-item" data-idx="${i}" onmousedown="selectEvalPlayer(${i})" onmouseover="evalSetActive(${i},td)">
+      <span class="ptag ${pc[p.position]||''}" style="flex-shrink:0;">${p.position}</span>
+      <span class="td-item-name">${p.display_name}</span>
+      <span class="td-item-team">${p.latest_team||''}</span>
+      <span class="td-item-age">${p.age!=null?p.age+'y':'—'}</span>
+    </div>`
+  ).join('');
+  td._matches=matches;
+  td.classList.add('open');
 }
 
-buildAlloc();buildTiers();buildPrin();updBudget();calc();loadFromBQ();loadRoster();
+function evalSetActive(i,td){
+  evalActiveIdx=i;
+  td.querySelectorAll('.td-item').forEach((el,j)=>el.classList.toggle('active',j===i));
+}
+
+function onEvalKey(e){
+  const td=document.getElementById('eval-td');
+  if(!td.classList.contains('open'))return;
+  const items=td.querySelectorAll('.td-item');
+  if(!items.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();evalActiveIdx=Math.min(evalActiveIdx+1,items.length-1);items.forEach((el,j)=>el.classList.toggle('active',j===evalActiveIdx));items[evalActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='ArrowUp'){e.preventDefault();evalActiveIdx=Math.max(evalActiveIdx-1,0);items.forEach((el,j)=>el.classList.toggle('active',j===evalActiveIdx));items[evalActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='Enter'){e.preventDefault();if(evalActiveIdx>=0)selectEvalPlayer(evalActiveIdx);}
+  else if(e.key==='Escape'){td.classList.remove('open');}
+}
+
+function selectEvalPlayer(i){
+  const td=document.getElementById('eval-td');
+  const p=(td._matches||[])[i];
+  if(!p)return;
+  document.getElementById('eval-pn').value=p.display_name;
+  td.classList.remove('open');
+  loadEvalPlayer(p);
+}
+
+function setEvalStatus(msg,color='var(--text3)'){
+  const el=document.getElementById('eval-status');
+  el.textContent=msg;el.style.color=color;
+}
+
+async function loadEvalPlayer(p){
+  setEvalStatus('● Loading…','var(--text2)');
+  document.getElementById('eval-empty').style.display='none';
+  document.getElementById('eval-profile').style.display='none';
+  document.getElementById('eval-stats-grid').style.display='none';
+  document.getElementById('eval-lower').style.display='none';
+  try{
+    const resp=await fetch(BQ_URL+'?eval='+encodeURIComponent(p.gsis_id));
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    setEvalStatus('');
+    renderEvalPlayer(p,data);
+  }catch(err){
+    console.error('Eval load failed:',err);
+    setEvalStatus('✕ Failed to load player data','var(--red)');
+    document.getElementById('eval-empty').style.display='flex';
+  }
+}
+
+function fmt(n,dec){
+  dec=dec==null?0:dec;
+  if(n==null||isNaN(n))return '—';
+  return Number(n).toFixed(dec);
+}
+
+function isInRange(sal,rng){
+  const m=rng.match(/\$(\d+)[–\-]\$?(\d+)/);
+  if(!m)return false;
+  return sal>=parseInt(m[1])&&sal<=parseInt(m[2]);
+}
+
+function renderEvalPlayer(p,data){
+  const pos=p.position;
+  const s=data.season||{};
+  const weekly=data.weekly||[];
+  const drafted=players.find(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase());
+
+  document.getElementById('eval-name').textContent=p.display_name;
+  document.getElementById('eval-meta').textContent=
+    [pos,p.latest_team,p.age!=null?p.age+' yrs':null].filter(Boolean).join(' · ');
+
+  const badges=[];
+  if(s.games)badges.push({label:s.games+' GP',hi:false});
+  if(s.snap_pct!=null)badges.push({label:fmt(s.snap_pct*100,0)+'% snaps',hi:s.snap_pct>=.7});
+  if(pos==='QB'&&s.attempts)badges.push({label:fmt(s.attempts/s.games,1)+' att/g',hi:false});
+  if((pos==='WR'||pos==='TE')&&s.targets)badges.push({label:fmt(s.targets/s.games,1)+' tgt/g',hi:s.targets/s.games>=6});
+  if(pos==='RB'&&s.carries)badges.push({label:fmt(s.carries/s.games,1)+' car/g',hi:s.carries/s.games>=14});
+  if(s.wopr!=null)badges.push({label:'WOPR '+fmt(s.wopr,2),hi:s.wopr>=.45});
+  document.getElementById('eval-badges').innerHTML=badges.map(b=>
+    '<span class="eval-pbadge'+(b.hi?' highlight':'')+'">'+(b.label)+'</span>').join('');
+
+  let cells=[];
+  if(pos==='QB'){
+    cells=[
+      {val:fmt(s.fantasy_pts_ppr,1),lbl:'Fantasy Pts',sub:'season total',green:true},
+      {val:fmt(s.fantasy_pts_ppr&&s.games?s.fantasy_pts_ppr/s.games:null,1),lbl:'Pts / Game',sub:'0.5 PPR + TE prem'},
+      {val:fmt(s.passing_yards),lbl:'Pass Yards',sub:fmt(s.passing_tds,0)+' TDs · '+fmt(s.interceptions,0)+' INTs'},
+      {val:fmt(s.completion_pct,1)+'%',lbl:'Comp %',sub:fmt(s.attempts,0)+' att'},
+    ];
+  }else if(pos==='WR'||pos==='TE'){
+    cells=[
+      {val:fmt(s.fantasy_pts_ppr,1),lbl:'Fantasy Pts',sub:'season total',green:true},
+      {val:fmt(s.fantasy_pts_ppr&&s.games?s.fantasy_pts_ppr/s.games:null,1),lbl:'Pts / Game',sub:'0.5 PPR + TE prem'},
+      {val:fmt(s.receiving_yards),lbl:'Rec Yards',sub:fmt(s.receptions,0)+' rec · '+fmt(s.targets,0)+' tgt'},
+      {val:fmt(s.target_share!=null?s.target_share*100:null,1)+'%',lbl:'Target Share',sub:'WOPR '+fmt(s.wopr,2)},
+    ];
+  }else if(pos==='RB'){
+    cells=[
+      {val:fmt(s.fantasy_pts_ppr,1),lbl:'Fantasy Pts',sub:'season total',green:true},
+      {val:fmt(s.fantasy_pts_ppr&&s.games?s.fantasy_pts_ppr/s.games:null,1),lbl:'Pts / Game',sub:'0.5 PPR + TE prem'},
+      {val:fmt(s.rushing_yards),lbl:'Rush Yards',sub:fmt(s.carries,0)+' car · '+fmt(s.rushing_tds,0)+' TDs'},
+      {val:fmt(s.receptions,0),lbl:'Receptions',sub:fmt(s.receiving_yards,0)+' rec yds'},
+    ];
+  }
+  document.getElementById('eval-stats-grid').innerHTML=cells.map(c=>
+    '<div class="eval-stat-cell"><div class="eval-stat-val'+(c.green?' green':'')+'">'+c.val+'</div>'+
+    '<div class="eval-stat-lbl">'+c.lbl+'</div><div class="eval-stat-sub">'+c.sub+'</div></div>'
+  ).join('');
+
+  drawEvalChart(weekly);
+
+  const tiers=TIERS.filter(t=>t.pos===pos);
+  const draftedSal=drafted?drafted.sal:null;
+  document.getElementById('eval-contract-body').innerHTML=
+    tiers.map(t=>
+      '<div class="eval-tier-row'+(draftedSal&&isInRange(draftedSal,t.rng)?' active':'')+'">'+
+      '<div><div class="eval-tier-lbl">'+t.t+' — '+t.lbl+'</div>'+
+      '<div class="eval-tier-note">'+t.note+'</div></div>'+
+      '<div class="eval-tier-range">'+t.rng+'</div></div>'
+    ).join('')+
+    (drafted?
+      '<div class="eval-drafted-row"><span class="eval-drafted-lbl">Your drafted price</span>'+
+      '<span class="eval-drafted-val">$'+drafted.sal+' · '+drafted.yrs+'yr</span></div>':
+      '<div class="eval-drafted-row"><span class="eval-drafted-lbl">Not on your roster</span>'+
+      '<span class="eval-drafted-val" style="color:var(--text3);">—</span></div>');
+
+  document.getElementById('eval-profile').style.display='flex';
+  document.getElementById('eval-stats-grid').style.display='grid';
+  document.getElementById('eval-lower').style.display='grid';
+}
+
+function drawEvalChart(weekly){
+  const wrap=document.getElementById('eval-chart-wrap');
+  if(evalChart){evalChart.destroy();evalChart=null;}
+  if(!weekly||!weekly.length){
+    wrap.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:160px;font-size:12px;color:var(--text3);">No weekly data</div>';
+    return;
+  }
+  wrap.innerHTML='<canvas id="eval-chart"></canvas>';
+  const ctx=document.getElementById('eval-chart').getContext('2d');
+  const pts=weekly.map(w=>w.fantasy_pts!=null?+Number(w.fantasy_pts).toFixed(1):0);
+  const avg=pts.reduce((a,b)=>a+b,0)/pts.length;
+  evalChart=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:weekly.map(w=>'Wk '+w.week),
+      datasets:[{
+        data:pts,
+        backgroundColor:pts.map(v=>v>=avg?'rgba(0,201,122,0.7)':'rgba(74,96,128,0.45)'),
+        borderColor:pts.map(v=>v>=avg?'rgba(0,201,122,1)':'rgba(74,96,128,0.7)'),
+        borderWidth:1,borderRadius:3,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{
+        callbacks:{label:c=>c.parsed.y+' pts'},
+        backgroundColor:'rgba(15,25,40,0.95)',titleColor:'#fff',bodyColor:'#a0b0c8',
+        borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+      }},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'var(--text3)',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'var(--text3)',font:{size:10}},beginAtZero:true},
+      }
+    }
+  });
+}
+
+buildAlloc();buildTiers();buildPrin();updBudget();loadFromBQ();loadRoster();
 </script>
 </body>
 </html>
