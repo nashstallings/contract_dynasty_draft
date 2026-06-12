@@ -261,6 +261,162 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* ═══════════════════════════════════════════
+   MOBILE — max-width: 640px
+   ═══════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  body { padding: 0 0 60px; }
+
+  /* ── Header ─────────────────────────────── */
+  .site-header {
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 16px 0;
+  }
+  .title { font-size: 32px; }
+  .subtitle { font-size: 13px; }
+  .header-badges {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 5px;
+  }
+  .hbadge { font-size: 10px; padding: 3px 9px; }
+
+  /* ── Divider + stat row ──────────────────── */
+  .hdivider { margin: 14px 16px 0; }
+  .stat-row {
+    grid-template-columns: 1fr 1fr;
+    margin: 12px 16px 0;
+  }
+  .stat-cell { padding: 12px 14px; }
+  .stat-value { font-size: 24px; }
+  .stat-sub { font-size: 11px; }
+
+  /* ── Tabs ─────────────────────────────────── */
+  .tab-bar {
+    padding: 18px 16px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn { font-size: 13px; padding: 8px 14px; white-space: nowrap; flex-shrink: 0; }
+  .tab-divider { margin: 0 16px; }
+
+  /* ── Panels ──────────────────────────────── */
+  .panel { padding: 18px 16px 0; }
+  .section-label { margin: 22px 0 10px; font-size: 11px; }
+
+  /* ── Cap rules ───────────────────────────── */
+  .rules-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rule-card { padding: 10px 12px; }
+  .rule-value { font-size: 20px; }
+  .rule-detail { font-size: 11px; }
+
+  /* ── Dead money table ────────────────────── */
+  .dm-table { font-size: 11px; }
+  .dm-table th, .dm-table td { padding: 7px 8px; }
+  /* Hide example column on small screens */
+  .dm-table th:nth-child(3), .dm-table td:nth-child(3) { display: none; }
+
+  /* ── Allocation bars ─────────────────────── */
+  .alloc-row { gap: 8px; }
+  .alloc-pos { width: 68px; font-size: 13px; }
+  .alloc-range { width: 56px; }
+  .alloc-note { display: none; }
+
+  /* ── Tiers table ─────────────────────────── */
+  .tier-tbl thead th:last-child,
+  .tier-tbl tbody td:last-child { display: none; }
+  .tier-tbl tbody td { padding: 9px 8px; font-size: 12px; }
+
+  /* ── Principles ──────────────────────────── */
+  .prin-grid { grid-template-columns: 1fr; gap: 8px; }
+
+  /* ── Budget block ────────────────────────── */
+  .budget-block { padding: 14px 14px; margin-bottom: 14px; }
+  .budget-metrics { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .bmet { border-right: none; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .bmet:nth-child(odd) { padding-right: 8px; }
+  .bmet:nth-last-child(-n+2) { border-bottom: none; padding-bottom: 0; }
+  .bmet-value { font-size: 20px; }
+
+  /* ── Add player form ─────────────────────── */
+  .add-form-card { padding: 14px 14px; margin-bottom: 14px; }
+  .form-row-new {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .form-row-new .fg:first-child { grid-column: 1 / -1; }
+  .form-row-new .fg:last-child  { grid-column: 1 / -1; }
+  .add-btn { width: 100%; padding: 12px; font-size: 15px; }
+
+  /* ── Player list ─────────────────────────── */
+  /* Collapse 7-col to 5-col: hide Age */
+  .player-list-header {
+    grid-template-columns: 1fr 44px 62px 72px 28px;
+    padding: 8px 12px;
+    font-size: 9px;
+  }
+  .player-list-header span:nth-child(3) { display: none; }
+  .player-row-item {
+    grid-template-columns: 1fr 44px 62px 72px 28px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  /* Age cell is 3rd .player-cell */
+  .player-row-item .player-cell:first-of-type { display: none; }
+
+  /* ── Player Eval ─────────────────────────── */
+  .eval-search-wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .eval-search-wrap .fg { max-width: 100% !important; }
+  .eval-status { padding-bottom: 0; }
+
+  .eval-profile {
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 14px;
+    margin-bottom: 12px;
+  }
+  .eval-name { font-size: 22px; }
+  .eval-profile-badges { justify-content: flex-start; }
+
+  .eval-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .eval-stat-cell { padding: 11px 12px; }
+  .eval-stat-val { font-size: 22px; }
+
+  .eval-lower { grid-template-columns: 1fr; gap: 10px; }
+  .eval-card { padding: 14px 14px; }
+  .eval-card-title { margin-bottom: 10px; }
+}
+
+/* ═══════════════════════════════════════════
+   SMALL MOBILE — max-width: 380px
+   ═══════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .title { font-size: 26px; }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .rules-grid { grid-template-columns: 1fr; }
+  /* On very small screens hide contract col in tiers too */
+  .tier-tbl thead th:nth-child(4),
+  .tier-tbl tbody td:nth-child(4) { display: none; }
+  .bmet-value { font-size: 18px; }
+  .eval-stat-val { font-size: 20px; }
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
@@ -470,7 +626,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="eval-card-title">Weekly Fantasy Points <span class="eval-card-sub">(0.5 PPR + TE premium · 2025 REG)</span></div>
       <div class="eval-chart-wrap" id="eval-chart-wrap">
         <canvas id="eval-chart"></canvas>
-      </div>
       </div>
     </div>
 
