@@ -225,16 +225,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-proj-val{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text);}
 .eval-proj-empty{color:var(--text3);font-weight:400;}
 
-/* YPRR section */
-.eval-yprr-section{margin-top:16px;}
-.eval-yprr-header{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;}
-.eval-yprr-title{font-family:var(--font-head);font-size:14px;font-weight:700;letter-spacing:.5px;color:var(--text);}
-.eval-yprr-sub{font-family:var(--font-mono);font-size:10px;color:var(--text3);}
-.eval-yprr-kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
-.eval-yprr-kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
-.eval-yprr-kpi-val{font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green);line-height:1;}
-.eval-yprr-kpi-lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-top:3px;}
-.eval-yprr-chart-wrap{position:relative;height:140px;}
 
 /* CONTRACT CALC */
 .calc-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
@@ -481,15 +471,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="eval-chart-wrap" id="eval-chart-wrap">
         <canvas id="eval-chart"></canvas>
       </div>
-      <div class="eval-yprr-section" id="eval-yprr-section" style="display:none;">
-        <div class="eval-yprr-header">
-          <span class="eval-yprr-title">Receiving Efficiency</span>
-          <span class="eval-yprr-sub">PFR · 2025 REG</span>
-        </div>
-        <div class="eval-yprr-kpis" id="eval-yprr-kpis"></div>
-        <div class="eval-yprr-chart-wrap">
-          <canvas id="eval-yprr-chart"></canvas>
-        </div>
       </div>
     </div>
 
@@ -1016,7 +997,6 @@ function renderEvalPlayer(p,data){
   ).join('');
 
   drawEvalChart(weekly);
-  renderYprr(pos, data.yprr_weekly || [], data.yprr_season || null);
 
   const tiers=TIERS.filter(t=>t.pos===pos);
   const draftedSal=drafted?drafted.sal:null;
@@ -1070,107 +1050,6 @@ function drawEvalChart(weekly){
       scales:{
         x:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}}},
         y:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}},beginAtZero:true},
-      }
-    }
-  });
-}
-
-function renderYprr(pos, weekly, season) {
-  const section = document.getElementById('eval-yprr-section');
-  if (pos !== 'WR' && pos !== 'TE') { section.style.display = 'none'; return; }
-  if (!weekly || weekly.length === 0) { section.style.display = 'none'; return; }
-
-  section.style.display = 'block';
-
-  // Season-level fields from pfr_advstats_rec_season
-  const yprr      = season && season.yprr       != null ? Number(season.yprr).toFixed(2)         : '—';
-  const adot      = season && season.adot        != null ? Number(season.adot).toFixed(1)          : '—';
-  const yacR      = season && season.yac_r       != null ? Number(season.yac_r).toFixed(1)         : '—';
-  const dropPct   = season && season.drop_pct    != null ? Number(season.drop_pct).toFixed(1)+'%'  : '—';
-  const brokenTkl = season && season.broken_tackles != null ? Math.round(season.broken_tackles)    : '—';
-  const passerRat = season && season.passer_rating  != null ? Number(season.passer_rating).toFixed(1) : '—';
-
-  // Color-code YPRR: elite ≥2.0, solid ≥1.4, weak <1.4
-  const yprrNum = season ? parseFloat(season.yprr) : null;
-  const yprrColor = yprrNum == null ? '#7A90AE'
-    : yprrNum >= 2.0 ? 'var(--green)'
-    : yprrNum >= 1.4 ? 'var(--amber)'
-    : 'var(--red)';
-
-  // Color-code drop %: good <5%, warning 5-10%, bad >10%
-  const dropNum = season ? parseFloat(season.drop_pct) : null;
-  const dropColor = dropNum == null ? '#7A90AE'
-    : dropNum < 5  ? 'var(--green)'
-    : dropNum < 10 ? 'var(--amber)'
-    : 'var(--red)';
-
-  document.getElementById('eval-yprr-kpis').innerHTML = `
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:${yprrColor};">${yprr}</div>
-      <div class="eval-yprr-kpi-lbl">Yds / Target (YPRR proxy)</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${adot}</div>
-      <div class="eval-yprr-kpi-lbl">aDOT</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${yacR}</div>
-      <div class="eval-yprr-kpi-lbl">YAC / Reception</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:${dropColor};">${dropPct}</div>
-      <div class="eval-yprr-kpi-lbl">Drop %</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${brokenTkl}</div>
-      <div class="eval-yprr-kpi-lbl">Broken Tackles</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${passerRat}</div>
-      <div class="eval-yprr-kpi-lbl">Passer Rtg when targeted</div>
-    </div>`;
-
-  drawYprrChart(weekly);
-}
-
-let yprrChart = null;
-function drawYprrChart(weekly) {
-  if (yprrChart) { yprrChart.destroy(); yprrChart = null; }
-  if (!weekly || !weekly.length) return;
-
-  const ctx = document.getElementById('eval-yprr-chart').getContext('2d');
-  const vals = weekly.map(w => w.passer_rating != null ? +Number(w.passer_rating).toFixed(1) : 0);
-  const avg  = vals.reduce((a,b) => a+b, 0) / vals.length;
-
-  yprrChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: weekly.map(w => 'Wk ' + w.week),
-      datasets: [{
-        label: 'Passer Rtg',
-        data: vals,
-        backgroundColor: vals.map(v => v >= avg ? 'rgba(0,201,122,0.7)' : 'rgba(74,96,128,0.45)'),
-        borderColor:     vals.map(v => v >= avg ? 'rgba(0,201,122,1)'   : 'rgba(74,96,128,0.7)'),
-        borderWidth: 1, borderRadius: 3,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: { label: c => c.parsed.y.toFixed(1) + ' passer rating when targeted' },
-          backgroundColor: 'rgba(15,25,40,0.95)', titleColor: '#fff',
-          bodyColor: '#a0b0c8', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
-        },
-        annotation: { annotations: { avg: {
-          type: 'line', yMin: avg, yMax: avg,
-          borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderDash: [4,4],
-        }}}
-      },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#7A90AE', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#7A90AE', font: { size: 10 } }, beginAtZero: true },
       }
     }
   });
