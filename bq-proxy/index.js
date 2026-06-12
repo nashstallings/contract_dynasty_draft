@@ -12,9 +12,10 @@ exports.draftPicksInsert = async (req, res) => {
 
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
 
-  // ── GET — load all picks on page load, or player roster ──────────────────
+  // ── GET ───────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
-    // ?roster=1  →  returns eligible player list from nflreadpy
+
+    // ?roster=1  →  eligible player list for draft typeahead
     if (req.query.roster === '1') {
       try {
         const [rows] = await bq.query({
@@ -40,6 +41,92 @@ exports.draftPicksInsert = async (req, res) => {
       return;
     }
 
+    // ?eval=<gsis_id>  →  season + weekly stats for Player Eval tab
+    if (req.query.eval) {
+      const gsis_id = String(req.query.eval);
+      try {
+        // Season aggregates from player_stats + snap_counts + ff_opportunity
+        const [[seasonRows], [weeklyRows]] = await Promise.all([
+          bq.query({
+            query: `
+              WITH stats AS (
+                SELECT
+                  player_id,
+                  COUNT(DISTINCT week) AS games,
+                  SUM(passing_yards)      AS passing_yards,
+                  SUM(passing_tds)        AS passing_tds,
+                  SUM(passing_interceptions) AS interceptions,
+                  SUM(attempts)           AS attempts,
+                  SUM(completions)        AS completions,
+                  SUM(carries)            AS carries,
+                  SUM(rushing_yards)      AS rushing_yards,
+                  SUM(rushing_tds)        AS rushing_tds,
+                  SUM(receptions)         AS receptions,
+                  SUM(targets)            AS targets,
+                  SUM(receiving_yards)    AS receiving_yards,
+                  SUM(receiving_tds)      AS receiving_tds,
+                  SUM(fantasy_points_ppr) AS fantasy_pts_ppr
+                FROM \`${PROJECT}.nflreadpy.player_stats\`
+                WHERE player_id = @gsis_id
+                  AND season_type = 'REG'
+                GROUP BY player_id
+              ),
+              snaps AS (
+                SELECT
+                  pfr_player_id,
+                  AVG(offense_pct) AS snap_pct
+                FROM \`${PROJECT}.nflreadpy.snap_counts\`
+                WHERE game_type = 'REG'
+                GROUP BY pfr_player_id
+              ),
+              opp AS (
+                SELECT
+                  player_id,
+                  AVG(rec_attempt / NULLIF(rec_attempt_team,0)) AS target_share,
+                  AVG(total_fantasy_points / NULLIF(total_fantasy_points_exp,0)) AS wopr
+                FROM \`${PROJECT}.nflreadpy.ff_opportunity\`
+                WHERE player_id = @gsis_id
+                GROUP BY player_id
+              )
+              SELECT
+                s.*,
+                sn.snap_pct,
+                o.target_share,
+                o.wopr,
+                SAFE_DIVIDE(s.completions, s.attempts) AS completion_pct
+              FROM stats s
+              LEFT JOIN opp o ON o.player_id = s.player_id
+              LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl ON pl.gsis_id = s.player_id
+              LEFT JOIN snaps sn ON sn.pfr_player_id = pl.pfr_id
+            `,
+            params: { gsis_id },
+          }),
+          bq.query({
+            query: `
+              SELECT
+                week,
+                SUM(fantasy_points_ppr) AS fantasy_pts
+              FROM \`${PROJECT}.nflreadpy.player_stats\`
+              WHERE player_id = @gsis_id
+                AND season_type = 'REG'
+              GROUP BY week
+              ORDER BY week ASC
+            `,
+            params: { gsis_id },
+          }),
+        ]);
+
+        res.status(200).json({
+          season: seasonRows[0] || {},
+          weekly: weeklyRows,
+        });
+      } catch (err) {
+        console.error('Eval error:', err);
+        res.status(500).json({ error: 'Failed to load eval data', message: err.message });
+      }
+      return;
+    }
+
     // default: load existing draft picks
     try {
       const [rows] = await bq.query({
@@ -53,7 +140,7 @@ exports.draftPicksInsert = async (req, res) => {
     return;
   }
 
-  // ── DELETE — remove a pick by pick_id ────────────────────────────────────
+  // ── DELETE ────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE') {
     const { pick_id } = req.body;
     if (!pick_id) { res.status(400).json({ error: 'Missing pick_id' }); return; }
@@ -71,7 +158,7 @@ exports.draftPicksInsert = async (req, res) => {
     return;
   }
 
-  // ── POST — insert a new pick ──────────────────────────────────────────────
+  // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
     const body = req.body;
     const required = ['pick_id', 'player_name', 'position', 'salary', 'contract_yrs'];
@@ -81,7 +168,6 @@ exports.draftPicksInsert = async (req, res) => {
       }
     }
 
-    // Duplicate check — case-insensitive player name
     try {
       const [rows] = await bq.query({
         query:  `SELECT pick_id FROM \`${PROJECT}.${DATASET}.${TABLE}\` WHERE LOWER(player_name) = LOWER(@name) LIMIT 1`,
