@@ -483,7 +483,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       </div>
       <div class="eval-yprr-section" id="eval-yprr-section" style="display:none;">
         <div class="eval-yprr-header">
-          <span class="eval-yprr-title">Yards Per Route Run</span>
+          <span class="eval-yprr-title">Receiver Adv Stats</span>
           <span class="eval-yprr-sub">PFR · 2025 REG</span>
         </div>
         <div class="eval-yprr-kpis" id="eval-yprr-kpis"></div>
@@ -1077,44 +1077,37 @@ function drawEvalChart(weekly){
 
 function renderYprr(pos, weekly, season) {
   const section = document.getElementById('eval-yprr-section');
-  // Only show for WR and TE
   if (pos !== 'WR' && pos !== 'TE') { section.style.display = 'none'; return; }
   if (!weekly || weekly.length === 0) { section.style.display = 'none'; return; }
 
   section.style.display = 'block';
 
-  // KPI badges
-  const yprr  = season && season.yprr   != null ? Number(season.yprr).toFixed(2)    : '—';
-  const routes = season && season.routes_run != null ? Math.round(season.routes_run) : '—';
-  const adot   = season && season.adot   != null ? Number(season.adot).toFixed(1)    : '—';
-  const dropPct = season && season.drop_pct != null ? (Number(season.drop_pct)*100).toFixed(1)+'%' : '—';
+  const dropPct     = season && season.drop_pct      != null ? (Number(season.drop_pct)*100).toFixed(1)+'%' : '—';
+  const passerRat   = season && season.passer_rating  != null ? Number(season.passer_rating).toFixed(1)      : '—';
+  const brokenTkl   = season && season.broken_tackles != null ? Math.round(season.broken_tackles)            : '—';
 
-  // Color-code YPRR: elite ≥2.0, good ≥1.4, average ≥0.9
-  const yprrNum = season ? parseFloat(season.yprr) : null;
-  const yprrColor = yprrNum == null ? 'var(--text3)'
-    : yprrNum >= 2.0 ? 'var(--green)'
-    : yprrNum >= 1.4 ? 'var(--amber)'
+  // Color-code drop %: good <5%, warning 5-10%, bad >10%
+  const dropNum = season ? parseFloat(season.drop_pct)*100 : null;
+  const dropColor = dropNum == null ? '#7A90AE'
+    : dropNum < 5  ? 'var(--green)'
+    : dropNum < 10 ? 'var(--amber)'
     : 'var(--red)';
 
   document.getElementById('eval-yprr-kpis').innerHTML = `
     <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:${yprrColor};">${yprr}</div>
-      <div class="eval-yprr-kpi-lbl">YPRR (season)</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${routes}</div>
-      <div class="eval-yprr-kpi-lbl">Routes run</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${adot}</div>
-      <div class="eval-yprr-kpi-lbl">aDOT (avg)</div>
-    </div>
-    <div class="eval-yprr-kpi">
-      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${dropPct}</div>
+      <div class="eval-yprr-kpi-val" style="color:${dropColor};">${dropPct}</div>
       <div class="eval-yprr-kpi-lbl">Drop %</div>
+    </div>
+    <div class="eval-yprr-kpi">
+      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${passerRat}</div>
+      <div class="eval-yprr-kpi-lbl">Passer rating when targeted</div>
+    </div>
+    <div class="eval-yprr-kpi" style="grid-column:span 2;">
+      <div class="eval-yprr-kpi-val" style="color:#7A90AE;">${brokenTkl}</div>
+      <div class="eval-yprr-kpi-lbl">Broken tackles (season)</div>
     </div>`;
 
-  drawYprrChart(weekly);
+  drawYprrChart(weekly, 'drop_pct');
 }
 
 let yprrChart = null;
@@ -1123,7 +1116,8 @@ function drawYprrChart(weekly) {
   if (!weekly || !weekly.length) return;
 
   const ctx = document.getElementById('eval-yprr-chart').getContext('2d');
-  const vals = weekly.map(w => w.yprr != null ? +Number(w.yprr).toFixed(2) : 0);
+  // Show passer rating when targeted week-by-week (higher = better)
+  const vals = weekly.map(w => w.passer_rating != null ? +Number(w.passer_rating).toFixed(1) : 0);
   const avg  = vals.reduce((a,b) => a+b, 0) / vals.length;
 
   yprrChart = new Chart(ctx, {
@@ -1142,7 +1136,7 @@ function drawYprrChart(weekly) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          callbacks: { label: c => c.parsed.y.toFixed(2) + ' yds/route' },
+          callbacks: { label: c => c.parsed.y.toFixed(1) + ' passer rating' },
           backgroundColor: 'rgba(15,25,40,0.95)', titleColor: '#fff',
           bodyColor: '#a0b0c8', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
         }
