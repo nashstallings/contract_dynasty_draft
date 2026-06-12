@@ -41,14 +41,13 @@ exports.draftPicksInsert = async (req, res) => {
       return;
     }
 
-    // ?eval=<gsis_id>  →  season + weekly stats + YPRR for Player Eval tab
+    // ?eval=<gsis_id>  →  season + weekly stats for Player Eval tab
     if (req.query.eval) {
       const gsis_id = String(req.query.eval);
       try {
-        // Core stats — always required; failure here returns 500
         const [[seasonRows], [weeklyRows]] = await Promise.all([
 
-          // 1. Season aggregates: player_stats + snap_counts + ff_opportunity
+          // Season aggregates: player_stats + snap_counts + ff_opportunity
           bq.query({
             query: `
               WITH stats AS (
@@ -98,11 +97,11 @@ exports.draftPicksInsert = async (req, res) => {
               LEFT JOIN opp o ON o.player_id = s.player_id
               LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl ON pl.gsis_id = s.player_id
               LEFT JOIN snaps sn ON sn.pfr_player_id = pl.pfr_id
-            \`,
+            `,
             params: { gsis_id },
           }),
 
-          // 2. Weekly fantasy points for bar chart
+          // Weekly fantasy points for bar chart
           bq.query({
             query: `
               SELECT week, SUM(fantasy_points_ppr) AS fantasy_pts
@@ -111,68 +110,14 @@ exports.draftPicksInsert = async (req, res) => {
                 AND season_type = 'REG'
               GROUP BY week
               ORDER BY week ASC
-            \`,
+            `,
             params: { gsis_id },
           }),
         ]);
 
-        // Receiver adv stats — two queries, both optional
-        // Weekly: pfr_advstats_rec — drops, passer rating, broken tackles per game
-        // Season: pfr_advstats_rec_season — yds/tgt (YPRR proxy), adot, yac_r, drop_percent
-        let yprrRows = [], yprr_season = null;
-        try {
-          // Weekly game-level context
-          const [weekRows] = await bq.query({
-            query: `
-              SELECT
-                r.week,
-                r.receiving_drop           AS drop,
-                r.receiving_drop_pct       AS drop_pct,
-                r.receiving_rat            AS passer_rating,
-                r.receiving_broken_tackles AS broken_tackles
-              FROM \`${PROJECT}.nflreadpy.pfr_advstats_rec\` r
-              JOIN \`${PROJECT}.nflreadpy.players\` pl
-                ON pl.pfr_id = r.pfr_player_id
-              WHERE pl.gsis_id = @gsis_id
-                AND r.game_type = 'REG'
-              ORDER BY r.week ASC
-            `,
-            params: { gsis_id },
-          });
-          yprrRows = weekRows;
-
-          // Season-level: yds/tgt as YPRR proxy, plus adot, yac_r, drop%, brk_tkl, passer rating
-          const [seasRows] = await bq.query({
-            query: `
-              SELECT
-                s.tgt,
-                s.rec,
-                s.yds,
-                SAFE_DIVIDE(s.yds, s.tgt)  AS yprr,
-                s.adot,
-                s.yac_r,
-                s.drop_percent             AS drop_pct,
-                s.brk_tkl                  AS broken_tackles,
-                s.rat                      AS passer_rating
-              FROM \`${PROJECT}.nflreadpy.pfr_advstats_rec_season\` s
-              JOIN \`${PROJECT}.nflreadpy.players\` pl
-                ON pl.pfr_id = s.pfr_id
-              WHERE pl.gsis_id = @gsis_id
-              LIMIT 1
-            `,
-            params: { gsis_id },
-          });
-          if (seasRows.length > 0) yprr_season = seasRows[0];
-
-        } catch (advErr) {
-          console.warn('Receiver adv stats skipped:', advErr.message);
-        }
-
         res.status(200).json({
-          season:      seasonRows[0] || {},
-          weekly:      weeklyRows,
-          yprr_weekly: yprrRows,
-          yprr_season,
+          season: seasonRows[0] || {},
+          weekly: weeklyRows,
         });
       } catch (err) {
         console.error('Eval error:', err);
@@ -200,7 +145,7 @@ exports.draftPicksInsert = async (req, res) => {
     if (!pick_id) { res.status(400).json({ error: 'Missing pick_id' }); return; }
     try {
       await bq.query({
-        query:  `DELETE FROM \`${PROJECT}.${DATASET}.${TABLE}\` WHERE pick_id = @pick_id`,
+        query: `DELETE FROM \`${PROJECT}.${DATASET}.${TABLE}\` WHERE pick_id = @pick_id`,
         params: { pick_id: String(pick_id) },
       });
       console.log(`Deleted pick: ${pick_id}`);
@@ -224,7 +169,7 @@ exports.draftPicksInsert = async (req, res) => {
 
     try {
       const [rows] = await bq.query({
-        query:  `SELECT pick_id FROM \`${PROJECT}.${DATASET}.${TABLE}\` WHERE LOWER(player_name) = LOWER(@name) LIMIT 1`,
+        query: `SELECT pick_id FROM \`${PROJECT}.${DATASET}.${TABLE}\` WHERE LOWER(player_name) = LOWER(@name) LIMIT 1`,
         params: { name: String(body.player_name) },
       });
       if (rows.length > 0) {
