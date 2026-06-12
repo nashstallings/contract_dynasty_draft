@@ -45,7 +45,8 @@ exports.draftPicksInsert = async (req, res) => {
     if (req.query.eval) {
       const gsis_id = String(req.query.eval);
       try {
-        const [[seasonRows], [weeklyRows], [yprrRows]] = await Promise.all([
+        // Core stats — always required; failure here returns 500
+        const [[seasonRows], [weeklyRows]] = await Promise.all([
 
           // 1. Season aggregates: player_stats + snap_counts + ff_opportunity
           bq.query({
@@ -81,7 +82,7 @@ exports.draftPicksInsert = async (req, res) => {
               opp AS (
                 SELECT
                   player_id,
-                  AVG(rec_attempt / NULLIF(rec_attempt_team, 0))               AS target_share,
+                  AVG(rec_attempt / NULLIF(rec_attempt_team, 0))                  AS target_share,
                   AVG(total_fantasy_points / NULLIF(total_fantasy_points_exp, 0)) AS wopr
                 FROM \`${PROJECT}.nflreadpy.ff_opportunity\`
                 WHERE player_id = @gsis_id
@@ -97,7 +98,7 @@ exports.draftPicksInsert = async (req, res) => {
               LEFT JOIN opp o ON o.player_id = s.player_id
               LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl ON pl.gsis_id = s.player_id
               LEFT JOIN snaps sn ON sn.pfr_player_id = pl.pfr_id
-            `,
+            \`,
             params: { gsis_id },
           }),
 
@@ -110,13 +111,15 @@ exports.draftPicksInsert = async (req, res) => {
                 AND season_type = 'REG'
               GROUP BY week
               ORDER BY week ASC
-            `,
+            \`,
             params: { gsis_id },
           }),
+        ]);
 
-          // 3. Weekly YPRR from pfr_advstats_rec, joined via pfr_id
-          //    Table created by Colab ETL: nflreadpy.load_pfr_advstats(stat_type='rec')
-          bq.query({
+        // YPRR — optional; silently skipped if pfr_advstats_rec table doesn't exist yet
+        let yprrRows = [], yprr_season = null;
+        try {
+          const [rows] = await bq.query({
             query: `
               SELECT
                 r.week,
@@ -134,20 +137,23 @@ exports.draftPicksInsert = async (req, res) => {
               WHERE pl.gsis_id = @gsis_id
                 AND r.game_type = 'REG'
               ORDER BY r.week ASC
-            `,
+            \`,
             params: { gsis_id },
-          }),
-        ]);
-
-        // Roll up season-level YPRR from the weekly rows
-        const totalRoutes = yprrRows.reduce((s, r) => s + (r.routes_run || 0), 0);
-        const totalRecYds = yprrRows.reduce((s, r) => s + (r.rec_yards  || 0), 0);
-        const yprr_season = yprrRows.length > 0 ? {
-          routes_run: totalRoutes,
-          yprr:       totalRoutes > 0 ? totalRecYds / totalRoutes : null,
-          adot:       yprrRows.reduce((s, r) => s + (r.adot     || 0), 0) / yprrRows.length,
-          drop_pct:   yprrRows.reduce((s, r) => s + (r.drop_pct || 0), 0) / yprrRows.length,
-        } : null;
+          });
+          yprrRows = rows;
+          const totalRoutes = rows.reduce((s, r) => s + (r.routes_run || 0), 0);
+          const totalRecYds = rows.reduce((s, r) => s + (r.rec_yards  || 0), 0);
+          if (rows.length > 0) {
+            yprr_season = {
+              routes_run: totalRoutes,
+              yprr:       totalRoutes > 0 ? totalRecYds / totalRoutes : null,
+              adot:       rows.reduce((s, r) => s + (r.adot     || 0), 0) / rows.length,
+              drop_pct:   rows.reduce((s, r) => s + (r.drop_pct || 0), 0) / rows.length,
+            };
+          }
+        } catch (yprrErr) {
+          console.warn('YPRR query skipped (table may not exist yet):', yprrErr.message);
+        }
 
         res.status(200).json({
           season:      seasonRows[0] || {},
