@@ -204,11 +204,11 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-stat-val.green{color:var(--green);}
 .eval-stat-lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-top:5px;}
 .eval-stat-sub{font-family:var(--font-mono);font-size:11px;color:var(--text2);margin-top:3px;}
-.eval-lower{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;}
+.eval-lower{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;align-items:start;}
 .eval-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
 .eval-card-title{font-family:var(--font-head);font-size:14px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:14px;}
 .eval-card-sub{font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;}
-.eval-chart-wrap{position:relative;height:160px;}
+.eval-chart-wrap{position:relative;}
 .eval-contract-body{display:flex;flex-direction:column;gap:8px;}
 .eval-tier-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:7px;border:1px solid var(--border);}
 .eval-tier-row.active{border-color:var(--green-mid);background:var(--green-dim);}
@@ -1041,7 +1041,7 @@ function drawEvalChart(weekly){
       }]
     },
     options:{
-      responsive:true,maintainAspectRatio:false,
+      responsive:true,maintainAspectRatio:true,aspectRatio:2.4,
       plugins:{legend:{display:false},tooltip:{
         callbacks:{label:c=>c.parsed.y+' pts'},
         backgroundColor:'rgba(15,25,40,0.95)',titleColor:'#fff',bodyColor:'#a0b0c8',
