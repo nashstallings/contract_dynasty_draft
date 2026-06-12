@@ -116,43 +116,56 @@ exports.draftPicksInsert = async (req, res) => {
           }),
         ]);
 
-        // YPRR — optional; silently skipped if pfr_advstats_rec table doesn't exist yet
+        // Receiver adv stats — two queries, both optional
+        // Weekly: pfr_advstats_rec — drops, passer rating, broken tackles per game
+        // Season: pfr_advstats_rec_season — yds/tgt (YPRR proxy), adot, yac_r, drop_percent
         let yprrRows = [], yprr_season = null;
         try {
-          const [rows] = await bq.query({
+          // Weekly game-level context
+          const [weekRows] = await bq.query({
             query: `
               SELECT
                 r.week,
-                r.routes_run,
-                r.targets                               AS pfr_targets,
-                r.rec_yards,
-                SAFE_DIVIDE(r.rec_yards, r.routes_run)  AS yprr,
-                r.adot,
-                r.yac,
-                r.drop,
-                r.drop_pct
+                r.receiving_drop           AS drop,
+                r.receiving_drop_pct       AS drop_pct,
+                r.receiving_rat            AS passer_rating,
+                r.receiving_broken_tackles AS broken_tackles
               FROM \`${PROJECT}.nflreadpy.pfr_advstats_rec\` r
               JOIN \`${PROJECT}.nflreadpy.players\` pl
                 ON pl.pfr_id = r.pfr_player_id
               WHERE pl.gsis_id = @gsis_id
                 AND r.game_type = 'REG'
               ORDER BY r.week ASC
-            \`,
+            `,
             params: { gsis_id },
           });
-          yprrRows = rows;
-          const totalRoutes = rows.reduce((s, r) => s + (r.routes_run || 0), 0);
-          const totalRecYds = rows.reduce((s, r) => s + (r.rec_yards  || 0), 0);
-          if (rows.length > 0) {
-            yprr_season = {
-              routes_run: totalRoutes,
-              yprr:       totalRoutes > 0 ? totalRecYds / totalRoutes : null,
-              adot:       rows.reduce((s, r) => s + (r.adot     || 0), 0) / rows.length,
-              drop_pct:   rows.reduce((s, r) => s + (r.drop_pct || 0), 0) / rows.length,
-            };
-          }
-        } catch (yprrErr) {
-          console.warn('YPRR query skipped (table may not exist yet):', yprrErr.message);
+          yprrRows = weekRows;
+
+          // Season-level: yds/tgt as YPRR proxy, plus adot, yac_r, drop%, brk_tkl, passer rating
+          const [seasRows] = await bq.query({
+            query: `
+              SELECT
+                s.tgt,
+                s.rec,
+                s.yds,
+                SAFE_DIVIDE(s.yds, s.tgt)  AS yprr,
+                s.adot,
+                s.yac_r,
+                s.drop_percent             AS drop_pct,
+                s.brk_tkl                  AS broken_tackles,
+                s.rat                      AS passer_rating
+              FROM \`${PROJECT}.nflreadpy.pfr_advstats_rec_season\` s
+              JOIN \`${PROJECT}.nflreadpy.players\` pl
+                ON pl.pfr_id = s.pfr_id
+              WHERE pl.gsis_id = @gsis_id
+              LIMIT 1
+            `,
+            params: { gsis_id },
+          });
+          if (seasRows.length > 0) yprr_season = seasRows[0];
+
+        } catch (advErr) {
+          console.warn('Receiver adv stats skipped:', advErr.message);
         }
 
         res.status(200).json({
