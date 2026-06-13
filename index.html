@@ -1182,12 +1182,15 @@ function drawEvalChart(weekly){
   }
   wrap.innerHTML='<canvas id="eval-chart"></canvas>';
   const ctx=document.getElementById('eval-chart').getContext('2d');
-  const pts=weekly.map(w=>w.fantasy_pts!=null?+Number(w.fantasy_pts).toFixed(1):0);
-  const avg=pts.reduce((a,b)=>a+b,0)/pts.length;
+  // Build full 18-week arrays — missing weeks show 0
+  const weekMap=Object.fromEntries(weekly.map(w=>[w.week, w.fantasy_pts!=null?+Number(w.fantasy_pts).toFixed(1):0]));
+  const labels=Array.from({length:18},(_,i)=>'Wk '+(i+1));
+  const pts=Array.from({length:18},(_,i)=>weekMap[i+1]??0);
+  const avg=pts.filter(v=>v>0).reduce((a,b)=>a+b,0)/Math.max(pts.filter(v=>v>0).length,1);
   evalChart=new Chart(ctx,{
     type:'bar',
     data:{
-      labels:weekly.map(w=>'Wk '+w.week),
+      labels,
       datasets:[{
         data:pts,
         backgroundColor:pts.map(v=>v>=avg?'rgba(0,201,122,0.7)':'rgba(74,96,128,0.45)'),
