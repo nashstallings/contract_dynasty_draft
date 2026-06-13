@@ -1193,8 +1193,8 @@ function drawEvalChart(weekly){
       labels,
       datasets:[{
         data:pts,
-        backgroundColor:pts.map(v=>v>=avg?'rgba(0,201,122,0.7)':'rgba(74,96,128,0.45)'),
-        borderColor:pts.map(v=>v>=avg?'rgba(0,201,122,1)':'rgba(74,96,128,0.7)'),
+        backgroundColor:pts.map(v=>v>=20?'rgba(0,201,122,0.7)':'rgba(74,96,128,0.45)'),
+        borderColor:pts.map(v=>v>=20?'rgba(0,201,122,1)':'rgba(74,96,128,0.7)'),
         borderWidth:1,borderRadius:3,
       }]
     },
