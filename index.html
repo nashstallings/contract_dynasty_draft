@@ -227,7 +227,41 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-proj-val{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text);}
 .eval-proj-empty{color:var(--text3);font-weight:400;}
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+/* ── Draft Targets ── */
+.tgt-roster-block{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px;}
+.tgt-pos-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.tgt-pos-card.needs{border-color:#F04D4D55;background:#F04D4D08;}
+.tgt-pos-card.ok{border-color:#00C97A44;}
+.tgt-pos-label{font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
+.tgt-pos-count{font-family:var(--font-head);font-size:26px;font-weight:800;line-height:1;}
+.tgt-pos-need{font-size:11px;color:var(--text3);margin-top:4px;}
+.tgt-budget-bar{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.tgt-budget-pill{font-family:var(--font-mono);font-size:12px;color:var(--text2);}
+.tgt-budget-pill strong{color:var(--text);}
+.tgt-budget-pill.warn strong{color:var(--amber);}
+.tgt-budget-pill.crit strong{color:var(--red);}
+.tgt-bucket{display:flex;flex-direction:column;gap:10px;margin-bottom:8px;}
+.tgt-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:center;transition:border-color .15s,background .15s;}
+.tgt-card:hover{background:var(--card2);border-color:var(--border2);}
+.tgt-card.need{border-left:3px solid var(--red);}
+.tgt-card.value{border-left:3px solid var(--green);}
+.tgt-card.stash{border-left:3px solid var(--text3);}
+.tgt-rank{font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:center;}
+.tgt-info{display:flex;flex-direction:column;gap:3px;}
+.tgt-name{font-weight:600;font-size:14px;color:var(--text);}
+.tgt-meta{font-size:11px;color:var(--text3);font-family:var(--font-mono);}
+.tgt-why{font-size:12px;color:var(--text2);margin-top:3px;line-height:1.5;}
+.tgt-price{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.tgt-bid{font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green);}
+.tgt-bid-label{font-family:var(--font-mono);font-size:10px;color:var(--text3);}
+.tgt-badges{display:flex;gap:5px;flex-wrap:wrap;}
+@media(max-width:640px){
+  .tgt-roster-block{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+  .tgt-card{grid-template-columns:24px 1fr auto;gap:8px;padding:11px 12px;}
+  .tgt-bid{font-size:18px;}
+  .tgt-why{display:none;}
+}
+
 .panel.on .alloc-row,.panel.on .tier-tbl tbody tr,.panel.on .prin-card,.panel.on .rule-card{animation:fadeUp .3s ease both;}
 .panel.on .alloc-row:nth-child(1){animation-delay:.03s;}.panel.on .alloc-row:nth-child(2){animation-delay:.06s;}.panel.on .alloc-row:nth-child(3){animation-delay:.09s;}.panel.on .alloc-row:nth-child(4){animation-delay:.12s;}.panel.on .alloc-row:nth-child(5){animation-delay:.15s;}.panel.on .alloc-row:nth-child(6){animation-delay:.18s;}
 ::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
@@ -332,6 +366,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
   <button class="tab-btn" onclick="sw('draft',this)">Draft Tracker</button>
+  <button class="tab-btn" onclick="sw('targets',this)">Draft Targets</button>
   <button class="tab-btn" onclick="sw('values',this)">Auction Values</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
 </div>
@@ -468,6 +503,32 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     </table>
   </div>
   <div style="height:32px;"></div>
+</div>
+
+<!-- ========== DRAFT TARGETS PANEL ========== -->
+<div class="panel" id="p-targets">
+
+  <!-- Roster snapshot -->
+  <div class="tgt-roster-block" id="tgt-roster-block"></div>
+
+  <!-- Bucket: Must-Have Starters -->
+  <div class="section-label" id="tgt-label-need" style="display:none;">Fill Starter Needs</div>
+  <div id="tgt-need" class="tgt-bucket"></div>
+
+  <!-- Bucket: Best Available Value -->
+  <div class="section-label" id="tgt-label-bav" style="display:none;">Best Available Value</div>
+  <div id="tgt-bav" class="tgt-bucket"></div>
+
+  <!-- Bucket: Late Stash / PS -->
+  <div class="section-label" id="tgt-label-stash" style="display:none;">Late Stash &amp; PS Targets</div>
+  <div id="tgt-stash" class="tgt-bucket"></div>
+
+  <div id="tgt-empty" class="eval-empty-state" style="display:none;">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    <div>No auction values loaded yet — waiting on BigQuery.</div>
+  </div>
+
+  <div style="height:40px;"></div>
 </div>
 
 <!-- ========== PLAYER EVAL PANEL ========== -->
@@ -823,6 +884,7 @@ function sw(id,btn){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('on');
   if(id==='draft') updBudget();
+  if(id==='targets') renderTargets();
 }
 
 function buildAlloc(){
@@ -889,6 +951,8 @@ function updBudget(){
   document.getElementById('pos-pills').innerHTML=Object.entries(cnts).map(([pos,n])=>
     `<span class="pos-pill" style="background:${bcol[pos]||'var(--card2)'};color:${tcol[pos]||'var(--text2)'};border-color:${tcol[pos]||'var(--border)'}33;">${pos}: ${n}</span>`).join('');
   renderPlayers();
+  // keep targets fresh any time roster changes
+  if(document.getElementById('p-targets').classList.contains('on')) renderTargets();
 }
 
 function renderPlayers(){
@@ -1117,8 +1181,166 @@ function drawEvalChart(weekly){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Init
+// Draft Targets engine
 // ─────────────────────────────────────────────────────────────────────────────
+
+// League roster requirements
+const ROSTER_NEEDS = { QB:2, RB:4, WR:5, TE:1 }; // starters + min bench per pos
+const STARTER_SLOTS = { QB:2, RB:2, WR:3, TE:1, FLEX:2, SF:1 };
+
+// PS-eligible rookies / year-2 players (auction_value <= $8, known young players)
+const PS_ELIGIBLE_NAMES = new Set([
+  'jeremiyah love','omarion hampton','tetairoa mcmillan','colston loveland',
+  'ashton jeanty','cam ward','travis hunter','keon coleman','luther burden iii',
+  'marvin harrison jr.','anthony richardson','braelon allen','jonathan brooks',
+  'jonathon brooks','roman wilson','zach charbonnet','xavier worthy',
+  'quentin johnston','wan\'dale robinson','josh downs','tyjae spears',
+  'tyrone tracy jr.','jahan dotson','chase brown'
+]);
+
+function computeTargets() {
+  if (!auctionValues.length) return null;
+
+  const spent = players.reduce((s, p) => s + p.sal, 0);
+  const remaining = 250 - spent;
+  const drafted = new Set(players.map(p => p.name.toLowerCase()));
+
+  // Count what we have per position
+  const have = { QB:0, RB:0, WR:0, TE:0 };
+  players.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
+
+  // Slots still needed (starters only, conservative)
+  const still = {};
+  Object.keys(ROSTER_NEEDS).forEach(pos => {
+    still[pos] = Math.max(0, ROSTER_NEEDS[pos] - have[pos]);
+  });
+  const totalSlotsLeft = Object.values(still).reduce((a, b) => a + b, 0);
+
+  // Available players (not yet drafted)
+  const avail = auctionValues.filter(r => !drafted.has(r.player_name.toLowerCase()));
+
+  // ── Bucket 1: Must-Have Starters ────────────────────────────────────────
+  // Best available player per position that still needs filling, budget-affordable
+  const needCards = [];
+  const usedInNeed = new Set();
+  const posOrder = ['QB','RB','WR','TE'];
+
+  posOrder.forEach(pos => {
+    if (still[pos] <= 0) return;
+    const candidates = avail
+      .filter(r => r.position === pos && !usedInNeed.has(r.player_name))
+      .sort((a, b) => a.rank - b.rank);
+
+    // Pick top N for this position (up to still[pos], max 3)
+    candidates.slice(0, Math.min(still[pos], 3)).forEach(r => {
+      usedInNeed.add(r.player_name);
+      needCards.push({ ...r, bucket:'need', why: buildWhy(r, still, remaining, totalSlotsLeft) });
+    });
+  });
+
+  // ── Bucket 2: Best Available Value ──────────────────────────────────────
+  // Top remaining players by tier/rank, affordable, not in need bucket
+  const bavCards = avail
+    .filter(r => !usedInNeed.has(r.player_name) && r.auction_value <= remaining)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 8)
+    .map(r => ({ ...r, bucket:'value', why: buildWhy(r, still, remaining, totalSlotsLeft) }));
+
+  // ── Bucket 3: Late Stash / PS ────────────────────────────────────────────
+  const stashCards = avail
+    .filter(r => {
+      const nm = r.player_name.toLowerCase();
+      return (PS_ELIGIBLE_NAMES.has(nm) || r.auction_value <= 5) && r.auction_value <= 8
+        && !usedInNeed.has(r.player_name) && !bavCards.find(b => b.player_name === r.player_name);
+    })
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 6)
+    .map(r => ({ ...r, bucket:'stash', why: buildWhy(r, still, remaining, totalSlotsLeft) }));
+
+  return { have, still, remaining, spent, needCards, bavCards, stashCards };
+}
+
+function buildWhy(r, still, remaining, slotsLeft) {
+  const parts = [];
+  if (still[r.position] > 0) parts.push(`Need ${still[r.position]} more ${r.position}`);
+  if (r.tier === 'TIER 1' || r.tier === 'TIER 2') parts.push(`${r.tier_desc} — elite value`);
+  if (r.ranking_note) parts.push(r.ranking_note.split('—')[0].trim());
+  const avgLeft = slotsLeft > 0 ? Math.round(remaining / slotsLeft) : 0;
+  if (r.auction_value <= avgLeft * 0.6 && r.auction_value <= 15) parts.push(`Budget friendly at $${r.auction_value}`);
+  return parts.slice(0, 2).join(' · ') || r.tier_desc || '';
+}
+
+function renderTargets() {
+  const result = computeTargets();
+
+  if (!result) {
+    document.getElementById('tgt-empty').style.display = 'flex';
+    document.getElementById('tgt-roster-block').innerHTML = '';
+    return;
+  }
+  document.getElementById('tgt-empty').style.display = 'none';
+
+  const { have, still, remaining, spent, needCards, bavCards, stashCards } = result;
+  const pc = { QB:'pQB', WR:'pWR', RB:'pRB', TE:'pTE' };
+
+  // ── Roster snapshot grid ─────────────────────────────────────────────────
+  const posColors = {
+    QB: { ok:'#3B82F6', label:'QBs' },
+    RB: { ok:'#F5A623', label:'RBs' },
+    WR: { ok:'#00C97A', label:'WRs' },
+    TE: { ok:'#E879B0', label:'TEs' },
+  };
+  const avgPerSlot = (250 - remaining > 0 && players.length > 0)
+    ? Math.round(remaining / Math.max(1, 36 - players.length)) : '—';
+
+  document.getElementById('tgt-roster-block').innerHTML = `
+    ${Object.entries(ROSTER_NEEDS).map(([pos, need]) => {
+      const h = have[pos] || 0;
+      const isOk = h >= need;
+      const col = isOk ? posColors[pos].ok : 'var(--red)';
+      return `<div class="tgt-pos-card ${isOk ? 'ok' : 'needs'}">
+        <div class="tgt-pos-label">${posColors[pos].label}</div>
+        <div class="tgt-pos-count" style="color:${col};">${h}<span style="font-size:14px;font-weight:400;color:var(--text3);">/${need}</span></div>
+        <div class="tgt-pos-need">${isOk ? '✓ Starters covered' : `Need ${need - h} more`}</div>
+      </div>`;
+    }).join('')}
+    <div class="tgt-pos-card">
+      <div class="tgt-pos-label">Budget left</div>
+      <div class="tgt-pos-count" style="color:${remaining > 80 ? 'var(--green)' : remaining > 40 ? 'var(--amber)' : 'var(--red)'};">$${remaining}</div>
+      <div class="tgt-pos-need">~$${avgPerSlot}/slot remaining</div>
+    </div>`;
+
+  // ── Render a bucket ───────────────────────────────────────────────────────
+  function renderBucket(cards, labelId, bucketId, emptyMsg) {
+    const lbl = document.getElementById(labelId);
+    const el  = document.getElementById(bucketId);
+    if (!cards.length) { lbl.style.display='none'; el.innerHTML=''; return; }
+    lbl.style.display='flex';
+    el.innerHTML = cards.map(r => `
+      <div class="tgt-card ${r.bucket}">
+        <div class="tgt-rank">#${r.rank}</div>
+        <div class="tgt-info">
+          <div class="tgt-badges">
+            <span class="ptag ${pc[r.position]||''}">${r.position}</span>
+            <span class="tbadge ${r.tier==='TIER 1'?'t1':r.tier==='TIER 2'?'t2':r.tier==='TIER 3'?'t3':'t4'}">${r.tier.replace('TIER ','T')}</span>
+            ${r.age ? `<span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);">${r.age}y</span>` : ''}
+          </div>
+          <div class="tgt-name">${r.player_name}</div>
+          <div class="tgt-why">${r.why}</div>
+        </div>
+        <div class="tgt-price">
+          <div class="tgt-bid">$${r.auction_value}</div>
+          <div class="tgt-bid-label">target bid</div>
+        </div>
+      </div>`).join('');
+  }
+
+  renderBucket(needCards, 'tgt-label-need', 'tgt-need');
+  renderBucket(bavCards,  'tgt-label-bav',  'tgt-bav');
+  renderBucket(stashCards,'tgt-label-stash','tgt-stash');
+}
+
+
 buildAlloc();buildTiers();buildPrin();updBudget();
 loadFromBQ();loadRoster();loadAuctionValues();
 </script>
