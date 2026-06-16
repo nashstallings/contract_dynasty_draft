@@ -41,6 +41,35 @@ exports.draftPicksInsert = async (req, res) => {
       return;
     }
 
+    // ?auction_values=1  →  player auction value cheat sheet for Auction Values tab
+    if (req.query.auction_values === '1') {
+      try {
+        const [rows] = await bq.query({
+          query: `
+            SELECT
+              av.player_id,
+              av.player_name,
+              av.position,
+              av.rank,
+              av.auction_value,
+              av.tier,
+              av.tier_desc,
+              av.ranking_note,
+              CAST(FLOOR(pl.age) AS INT64) AS age
+            FROM \`${PROJECT}.dynasty_tycoon.player_auction_values\` av
+            LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl
+              ON pl.gsis_id = av.player_id
+            ORDER BY av.rank ASC
+          `,
+        });
+        res.status(200).json({ auction_values: rows });
+      } catch (err) {
+        console.error('Auction values load error:', err);
+        res.status(500).json({ error: 'Failed to load auction values', message: err.message });
+      }
+      return;
+    }
+
     // ?eval=<gsis_id>  →  season + weekly stats for Player Eval tab
     if (req.query.eval) {
       const gsis_id = String(req.query.eval);
