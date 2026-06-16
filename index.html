@@ -501,9 +501,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="eval-chart-wrap" id="eval-chart-wrap"><canvas id="eval-chart"></canvas></div>
     </div>
     <div class="eval-card">
-      <div class="eval-card-title">Contract Value <span class="eval-card-sub">(Dynasty Tycoon range)</span></div>
-      <div id="eval-contract-body" class="eval-contract-body"></div>
-      <div class="eval-card-title" style="margin-top:18px;">2026 Auction Value <span class="eval-card-sub">(BQ consensus)</span></div>
+      <div class="eval-card-title">2026 Auction Value <span class="eval-card-sub">(BQ consensus)</span></div>
       <div class="eval-proj-placeholder" id="eval-proj">
         <div class="eval-proj-row">
           <span class="eval-proj-lbl">Target salary</span>
@@ -1056,15 +1054,7 @@ function renderEvalPlayer(p,data){
 
   drawEvalChart(weekly);
 
-  const tiers=TIERS.filter(t=>t.pos===pos);
-  const draftedSal=drafted?drafted.sal:null;
-  document.getElementById('eval-contract-body').innerHTML=
-    tiers.map(t=>`<div class="eval-tier-row${draftedSal&&isInRange(draftedSal,t.rng)?' active':''}">
-      <div><div class="eval-tier-lbl">${t.t} — ${t.lbl}</div><div class="eval-tier-note">${t.note}</div></div>
-      <div class="eval-tier-range">${t.rng}</div></div>`).join('')+
-    (drafted
-      ?`<div class="eval-drafted-row"><span class="eval-drafted-lbl">Your drafted price</span><span class="eval-drafted-val">$${drafted.sal} · ${drafted.yrs}yr</span></div>`
-      :`<div class="eval-drafted-row"><span class="eval-drafted-lbl">Not on your roster</span><span class="eval-drafted-val" style="color:var(--text3);">—</span></div>`);
+
 
   // 2026 Auction Value section — populated from avMap
   const epSal=document.getElementById('ep-salary'),epRank=document.getElementById('ep-rank'),
