@@ -99,6 +99,7 @@ exports.draftPicksInsert = async (req, res) => {
                 COALESCE(SUM(CASE WHEN position = 'TE' THEN 1 ELSE 0 END), 0) AS have_te,
                 COALESCE(MAX(CASE WHEN position = 'QB' AND salary >= 40 THEN 1 ELSE 0 END), 0) AS has_elite_qb
               FROM \`${PROJECT}.${DATASET}.${TABLE}\`
+              WHERE owner = 'NashStallings'
             ),
             -- Available undrafted players with age joined in
             available AS (
@@ -371,6 +372,7 @@ exports.draftPicksInsert = async (req, res) => {
     try {
       const pick_id         = String(body.pick_id).replace(/'/g,"''");
       const drafted_at      = body.drafted_at || new Date().toISOString();
+      const owner           = String(body.owner || 'NashStallings').replace(/'/g,"''");
       const player_name     = String(body.player_name).replace(/'/g,"''");
       const position        = String(body.position).replace(/'/g,"''");
       const age             = parseInt(body.age) || 0;
@@ -383,11 +385,12 @@ exports.draftPicksInsert = async (req, res) => {
       await bq.query({
         query: `
           INSERT INTO \`${PROJECT}.${DATASET}.${TABLE}\`
-            (pick_id, drafted_at, player_name, position, age, salary,
+            (pick_id, drafted_at, owner, player_name, position, age, salary,
              contract_yrs, discount_pct, cap_hit, total_commitment)
           VALUES (
             '${pick_id}',
             TIMESTAMP('${drafted_at}'),
+            '${owner}',
             '${player_name}',
             '${position}',
             ${age},
@@ -399,7 +402,7 @@ exports.draftPicksInsert = async (req, res) => {
           )
         `,
       });
-      console.log(`Inserted: ${player_name} (${position}) $${salary}/${contract_yrs}yr`);
+      console.log(`Inserted: ${player_name} (${position}) $${salary}/${contract_yrs}yr → ${owner}`);
       res.status(200).json({ success: true, pick_id: body.pick_id });
     } catch (err) {
       console.error('Insert error:', err);
