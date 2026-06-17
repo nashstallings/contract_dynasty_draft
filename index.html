@@ -825,7 +825,7 @@ async function writeToBQ(player){
 
 async function deleteFromBQ(pick_id){
   try{
-    const resp=await fetch(BQ_URL,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({pick_id})});
+    const resp=await fetch(BQ_URL+'?pick_id='+encodeURIComponent(pick_id),{method:'DELETE'});
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
   }catch(err){console.error('BQ delete failed:',err);}
 }
