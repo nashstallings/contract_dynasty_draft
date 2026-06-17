@@ -210,28 +210,39 @@ exports.draftPicksInsert = async (req, res) => {
     }
 
     try {
-      const row = {
-        pick_id:          String(body.pick_id),
-        drafted_at:       body.drafted_at || new Date().toISOString(),
-        player_name:      String(body.player_name),
-        position:         String(body.position),
-        age:              parseInt(body.age) || null,
-        salary:           parseFloat(body.salary),
-        contract_yrs:     parseInt(body.contract_yrs),
-        discount_pct:     parseFloat(body.discount_pct) || 0,
-        cap_hit:          parseFloat(body.cap_hit),
-        total_commitment: parseFloat(body.total_commitment),
-      };
-      await bq.dataset(DATASET).table(TABLE).insert([row]);
-      console.log(`Inserted: ${row.player_name} (${row.position}) $${row.salary}/${row.contract_yrs}yr`);
-      res.status(200).json({ success: true, pick_id: row.pick_id });
+      await bq.query({
+        query: `
+          INSERT INTO \`${PROJECT}.${DATASET}.${TABLE}\`
+            (pick_id, drafted_at, player_name, position, age, salary,
+             contract_yrs, discount_pct, cap_hit, total_commitment)
+          VALUES
+            (@pick_id, @drafted_at, @player_name, @position, @age, @salary,
+             @contract_yrs, @discount_pct, @cap_hit, @total_commitment)
+        `,
+        params: {
+          pick_id:          String(body.pick_id),
+          drafted_at:       body.drafted_at || new Date().toISOString(),
+          player_name:      String(body.player_name),
+          position:         String(body.position),
+          age:              parseInt(body.age) || null,
+          salary:           parseFloat(body.salary),
+          contract_yrs:     parseInt(body.contract_yrs),
+          discount_pct:     parseFloat(body.discount_pct) || 0,
+          cap_hit:          parseFloat(body.cap_hit),
+          total_commitment: parseFloat(body.total_commitment),
+        },
+        types: {
+          pick_id:'STRING', drafted_at:'STRING', player_name:'STRING',
+          position:'STRING', age:'INT64', salary:'FLOAT64',
+          contract_yrs:'INT64', discount_pct:'FLOAT64',
+          cap_hit:'FLOAT64', total_commitment:'FLOAT64',
+        },
+      });
+      console.log(`Inserted: ${body.player_name} (${body.position}) $${body.salary}/${body.contract_yrs}yr`);
+      res.status(200).json({ success: true, pick_id: body.pick_id });
     } catch (err) {
       console.error('Insert error:', err);
-      if (err.name === 'PartialFailureError') {
-        res.status(422).json({ error: 'BigQuery insert failed', details: err.errors });
-      } else {
-        res.status(500).json({ error: 'Internal server error', message: err.message });
-      }
+      res.status(500).json({ error: 'Internal server error', message: err.message });
     }
     return;
   }
