@@ -170,7 +170,7 @@ exports.draftPicksInsert = async (req, res) => {
 
   // ── DELETE ────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE') {
-    const { pick_id } = req.body;
+    const pick_id = req.query.pick_id;
     if (!pick_id) { res.status(400).json({ error: 'Missing pick_id' }); return; }
     try {
       await bq.query({
