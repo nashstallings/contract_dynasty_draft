@@ -151,7 +151,16 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .td-item-age{font-family:var(--font-mono);font-size:11px;color:var(--text2);width:36px;text-align:right;}
 .td-item-val{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--green);width:32px;text-align:right;flex-shrink:0;}
 .td-empty{padding:12px 14px;font-size:12px;color:var(--text3);text-align:center;}
-.form-row-new{display:grid;grid-template-columns:1fr 90px 130px auto;gap:10px;align-items:end;}
+.form-row-new{display:grid;grid-template-columns:1fr 90px 130px 150px auto;gap:10px;align-items:end;}
+.form-row-new select#powner{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-body);font-size:13px;padding:9px 12px;border-radius:7px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A90AE' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;cursor:pointer;}
+.form-row-new select#powner:focus{border-color:var(--green);}
+.team-selector-bar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+.team-selector-label{font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);}
+#team-selector{background:var(--card2);border:1px solid var(--border2);color:var(--text);font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:.5px;padding:8px 36px 8px 14px;border-radius:8px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A90AE' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;transition:border-color .15s;}
+#team-selector:focus,#team-selector:hover{border-color:var(--green-mid);}
+#team-selector.is-me{border-color:var(--green);color:var(--green);}
+.team-selector-spacer{flex:1;}
+.team-league-summary{font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right;}
 .form-row-new .fg{display:flex;flex-direction:column;justify-content:flex-end;}
 .form-autofill-row{display:flex;gap:8px;margin-top:8px;min-height:22px;align-items:center;}
 
@@ -427,14 +436,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <!-- ========== DRAFT TRACKER PANEL ========== -->
 <div class="panel" id="p-draft">
   <div class="callout-amber"><strong>Remember:</strong> Your $50 FAAB holdback is separate from this $250 draft budget. Don't mentally spend your FAAB during the auction.</div>
-  <div class="budget-block">
-    <div class="budget-metrics" id="bmet"></div>
-    <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
-    <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
-    <div class="pos-pills" id="pos-pills"></div>
-  </div>
+
+  <!-- Add player form (logs the winning bid + which team won it) -->
   <div class="add-form-card">
-    <div class="form-title">Add player</div>
+    <div class="form-title">Log a won player</div>
     <div class="form-row-new">
       <div class="fg">
         <label>Player name</label>
@@ -446,6 +451,9 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
       <div class="fg"><label>Contract</label>
         <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
+      </div>
+      <div class="fg"><label>Won by</label>
+        <select id="powner" onchange="draftOwner=this.value"></select>
       </div>
       <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addP()">+ Add</button></div>
     </div>
@@ -459,6 +467,23 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <span id="bq-status" style="font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;opacity:0;transition:opacity .3s;"></span>
     </div>
   </div>
+
+  <!-- Team selector: whose roster am I viewing -->
+  <div class="team-selector-bar">
+    <label class="team-selector-label">Viewing roster</label>
+    <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
+    <div class="team-selector-spacer"></div>
+    <div class="team-league-summary" id="team-league-summary"></div>
+  </div>
+
+  <!-- Budget block for the viewed team -->
+  <div class="budget-block">
+    <div class="budget-metrics" id="bmet"></div>
+    <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
+    <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
+    <div class="pos-pills" id="pos-pills"></div>
+  </div>
+
   <div class="player-list-card" id="plist-wrap">
     <div class="player-list-header">
       <span>Player</span><span style="text-align:center;">Pos</span>
@@ -624,6 +649,13 @@ let rosterList=[];
 let selectedPlayer=null;
 let tdActiveIdx=-1;
 
+// ── League teams ──────────────────────────────────────────────────────────────
+const TEAMS=['NashStallings','JustinStricklan','JordanSchultz','Taterade','noelfoster',
+  'DanielClinton','JoeFaustyn','RyanSmith5','IrradiAsian','GregDew','ColinGallagher','CamMonari'];
+const MY_TEAM='NashStallings';
+let viewedTeam=MY_TEAM;        // which team's roster the tracker is currently showing
+let draftOwner=MY_TEAM;        // which team the add-player form will assign the pick to
+
 // Auction values state
 let auctionValues=[];    // raw array from BQ
 let avMap=new Map();     // lowercase player_name → row  (O(1) lookups)
@@ -730,7 +762,7 @@ async function loadFromBQ(){
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data=await resp.json();
     players=(data.picks||[]).map(r=>({
-      pick_id:r.pick_id,name:r.player_name,pos:r.position,
+      pick_id:r.pick_id,owner:r.owner||'NashStallings',name:r.player_name,pos:r.position,
       age:parseInt(r.age)||25,sal:parseFloat(r.salary),yrs:parseInt(r.contract_yrs),
     }));
     updBudget();showBQStatus('loaded');
@@ -834,7 +866,7 @@ document.addEventListener('click',e=>{
 async function writeToBQ(player){
   const discount=DISC[player.yrs]||0;
   const cap=player.sal*(1-discount);
-  const row={pick_id:player.pick_id,drafted_at:new Date().toISOString(),player_name:player.name,
+  const row={pick_id:player.pick_id,drafted_at:new Date().toISOString(),owner:player.owner||MY_TEAM,player_name:player.name,
     position:player.pos,age:player.age,salary:player.sal,contract_yrs:player.yrs,
     discount_pct:discount*100,cap_hit:parseFloat(cap.toFixed(2)),total_commitment:parseFloat((cap*player.yrs).toFixed(2))};
   showBQStatus('saving');
@@ -963,6 +995,30 @@ function buildPrin(){
     </div>`).join('');
 }
 
+// Picks belonging to the team currently being viewed
+function viewedPicks(){ return players.filter(p => (p.owner||MY_TEAM) === viewedTeam); }
+
+// Populate the form owner dropdown + the team-selector dropdown
+function buildTeamDropdowns(){
+  const ownerSel=document.getElementById('powner');
+  const teamSel=document.getElementById('team-selector');
+  if(ownerSel){
+    ownerSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===MY_TEAM?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
+    draftOwner=ownerSel.value;
+  }
+  if(teamSel){
+    teamSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===viewedTeam?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
+    teamSel.classList.toggle('is-me',viewedTeam===MY_TEAM);
+  }
+}
+
+function setViewedTeam(team){
+  viewedTeam=team;
+  const teamSel=document.getElementById('team-selector');
+  if(teamSel) teamSel.classList.toggle('is-me',viewedTeam===MY_TEAM);
+  updBudget();
+}
+
 function ouBadge(sal,av){
   if(!av) return '<span class="ou-badge ou-none">—</span>';
   const d=sal-av.auction_value;
@@ -972,36 +1028,49 @@ function ouBadge(sal,av){
 }
 
 function updBudget(){
-  const spent=players.reduce((s,p)=>s+p.sal,0);
+  const tp=viewedPicks();
+  const spent=tp.reduce((s,p)=>s+p.sal,0);
   const rem=250-spent;
   const pct=Math.max(0,rem/250*100);
   const col=pct>30?'var(--green)':pct>15?'var(--amber)':'var(--red)';
   document.getElementById('bbar').style.width=pct+'%';
   document.getElementById('bbar').style.background=col;
   document.getElementById('blbl').textContent='$'+rem+' remaining';
-  const more=Math.max(1,36-players.length);
-  const avg=players.length?Math.round(spent/players.length):0;
+  const more=Math.max(1,36-tp.length);
+  const avg=tp.length?Math.round(spent/tp.length):0;
   document.getElementById('bmet').innerHTML=`
     <div class="bmet"><div class="bmet-label">Remaining</div><div class="bmet-value" style="color:${col}">$${rem}</div><div class="bmet-sub">of $250 budget</div></div>
-    <div class="bmet"><div class="bmet-label">Spent</div><div class="bmet-value">$${spent}</div><div class="bmet-sub">${players.length} players</div></div>
+    <div class="bmet"><div class="bmet-label">Spent</div><div class="bmet-value">$${spent}</div><div class="bmet-sub">${tp.length} players</div></div>
     <div class="bmet"><div class="bmet-label">Avg salary</div><div class="bmet-value">$${avg||'—'}</div><div class="bmet-sub">per player</div></div>
     <div class="bmet"><div class="bmet-label">$/spot left</div><div class="bmet-value">${rem>0?'$'+Math.round(rem/more):'—'}</div><div class="bmet-sub">~${more} spots left</div></div>`;
   const cnts={};
   const bcol={QB:'#1E3A6E',WR:'#0D3B2A',RB:'#3D2B00',TE:'#3B1240'};
   const tcol={QB:'#60A5FA',WR:'#34D399',RB:'#FCD34D',TE:'#E879B0'};
-  players.forEach(p=>{cnts[p.pos]=(cnts[p.pos]||0)+1;});
+  tp.forEach(p=>{cnts[p.pos]=(cnts[p.pos]||0)+1;});
   document.getElementById('pos-pills').innerHTML=Object.entries(cnts).map(([pos,n])=>
     `<span class="pos-pill" style="background:${bcol[pos]||'var(--card2)'};color:${tcol[pos]||'var(--text2)'};border-color:${tcol[pos]||'var(--border)'}33;">${pos}: ${n}</span>`).join('');
   renderPlayers();
+  renderLeagueSummary();
+}
+
+// Compact league-wide spend summary shown in the team selector bar
+function renderLeagueSummary(){
+  const el=document.getElementById('team-league-summary');
+  if(!el) return;
+  const totalDrafted=players.length;
+  const mySpent=players.filter(p=>(p.owner||MY_TEAM)===MY_TEAM).reduce((s,p)=>s+p.sal,0);
+  el.innerHTML=`${totalDrafted} drafted leaguewide · you've spent $${mySpent}/$250`;
 }
 
 function renderPlayers(){
   const el=document.getElementById('plist');
-  if(!players.length){
-    el.innerHTML='<div class="empty-state">No players added yet — log your first pick above.</div>';return;
+  const tp=viewedPicks();
+  if(!tp.length){
+    el.innerHTML=`<div class="empty-state">No players drafted by ${viewedTeam} yet.</div>`;return;
   }
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
-  el.innerHTML=players.map((p,i)=>{
+  el.innerHTML=tp.map((p)=>{
+    const gi=players.indexOf(p); // global index for delete
     const d=DISC[p.yrs]||0;
     const cap=(p.sal*(1-d)).toFixed(1);
     const av=avMap.get(p.name.toLowerCase());
@@ -1017,7 +1086,7 @@ function renderPlayers(){
       <span class="player-cell">${ouBadge(p.sal,av)}</span>
       <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
       <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
-      <button class="del-btn" onclick="delP(${i})" aria-label="Remove player">
+      <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>`;
@@ -1030,14 +1099,22 @@ function addP(){
   const age=selectedPlayer.age!=null?parseInt(selectedPlayer.age):null;
   const sal=parseInt(document.getElementById('ps').value)||0;
   const yrs=parseInt(document.getElementById('py').value)||1;
+  const owner=document.getElementById('powner').value||MY_TEAM;
   if(!sal){document.getElementById('ps').focus();return;}
+  // Off the board if ANY team already has them
   if(players.some(p=>p.name.toLowerCase()===name.toLowerCase())){showBQStatus('duplicate',`${name} is already drafted`);return;}
-  const spent=players.reduce((s,p)=>s+p.sal,0);
-  if(spent+sal>250){alert('Over budget! Only $'+(250-spent)+' remaining.');return;}
-  const player={pick_id:crypto.randomUUID(),name,pos,age,sal,yrs};
+  // Budget check against the WINNING team's spend
+  const ownerSpent=players.filter(p=>(p.owner||MY_TEAM)===owner).reduce((s,p)=>s+p.sal,0);
+  if(ownerSpent+sal>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
+  const player={pick_id:crypto.randomUUID(),owner,name,pos,age,sal,yrs};
   players.push(player);writeToBQ(player);
   document.getElementById('pn').value='';document.getElementById('ps').value='';
-  selectedPlayer=null;setAutofill(null);updBudget();
+  selectedPlayer=null;setAutofill(null);
+  // Jump the view to the team that just won the player so you see it land
+  viewedTeam=owner;
+  const teamSel=document.getElementById('team-selector');
+  if(teamSel){ teamSel.value=owner; teamSel.classList.toggle('is-me',owner===MY_TEAM); }
+  updBudget();
 }
 
 async function delP(i){
@@ -1312,22 +1389,27 @@ function scorePlayer(r, context) {
 function computeTargets(picks) {
   if (!auctionValues.length) return null;
 
-  const spent     = picks.reduce((s, p) => s + p.sal, 0);
+  // My roster drives need + budget; all picks drive who's off the board.
+  const myPicks   = picks.filter(p => (p.owner || MY_TEAM) === MY_TEAM);
+
+  const spent     = myPicks.reduce((s, p) => s + p.sal, 0);
   const remaining = 250 - spent;
+
+  // A player is unavailable if ANY team has drafted them.
   const drafted   = new Set(picks.map(p => p.name.toLowerCase()));
 
-  // Current roster composition
+  // Current roster composition — my team only
   const have = { QB:0, RB:0, WR:0, TE:0 };
-  picks.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
+  myPicks.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
 
-  // How many roster spots left (total target is 36: ~10 starters + 14 bench + 10 PS + 2 buffer)
-  const totalDrafted  = picks.length;
+  // How many roster spots left on my team (target 36)
+  const totalDrafted  = myPicks.length;
   const slotsLeft     = Math.max(1, 36 - totalDrafted);
   const avgBid        = remaining / slotsLeft;
 
-  const context = { have, remaining, totalSpent: spent, avgBid, picks };
+  const context = { have, remaining, totalSpent: spent, avgBid, picks: myPicks };
 
-  // Available players sorted by priority score
+  // Available players sorted by priority score (excludes anyone any team drafted)
   const avail = auctionValues
     .filter(r => !drafted.has(r.player_name.toLowerCase()) && r.auction_value <= remaining)
     .map(r => ({ ...r, _score: scorePlayer(r, context) }))
@@ -1447,6 +1529,8 @@ async function fetchDraftPicks() {
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
   return (data.picks || []).map(r => ({
+    pick_id: r.pick_id,
+    owner: r.owner || MY_TEAM,
     name: r.player_name,
     pos:  r.position,
     age:  parseInt(r.age) || 25,
@@ -1471,13 +1555,13 @@ async function renderTargets() {
   try {
     livePicks = await fetchDraftPicks();
     // keep the global in sync so other tabs reflect the same board
-    players = livePicks.map(p => ({ ...p, pick_id: undefined }));
+    players = livePicks.map(p => ({ ...p }));
   } catch (err) {
     console.error('Targets fetch failed:', err);
     setTgtStatus('✕ Could not reach draft board — showing last known', 'error');
     if (btn) btn.classList.remove('spinning');
     // fall back to whatever is in memory
-    livePicks = players.map(p => ({ name:p.name, pos:p.pos, age:p.age, sal:p.sal, yrs:p.yrs }));
+    livePicks = players.map(p => ({ pick_id:p.pick_id, owner:p.owner, name:p.name, pos:p.pos, age:p.age, sal:p.sal, yrs:p.yrs }));
   }
 
   const result = computeTargets(livePicks);
@@ -1486,7 +1570,8 @@ async function renderTargets() {
   if (btn) btn.classList.remove('spinning');
   if (result) {
     const ts = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    setTgtStatus(`✓ Live — ${result.totalDrafted} picks on board · updated ${ts}`, 'live');
+    const leagueDrafted = livePicks.length;
+    setTgtStatus(`✓ Live — your roster ${result.totalDrafted} · ${leagueDrafted} drafted leaguewide · ${ts}`, 'live');
   }
 }
 
@@ -1561,7 +1646,7 @@ function paintTargets(result, livePicks) {
 }
 
 
-buildAlloc();buildTiers();buildPrin();updBudget();
+buildAlloc();buildTiers();buildPrin();buildTeamDropdowns();updBudget();
 loadFromBQ();loadRoster();loadAuctionValues();
 </script>
 </body>
