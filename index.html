@@ -228,7 +228,12 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-proj-empty{color:var(--text3);font-weight:400;}
 
 /* ── Draft Targets ── */
-.tgt-refresh-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.board-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.board-head-right{display:flex;align-items:center;gap:12px;}
+.board-toggle{display:inline-flex;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:3px;gap:2px;}
+.board-toggle-btn{font-family:var(--font-head);font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:7px 16px;background:none;border:none;color:var(--text3);cursor:pointer;border-radius:6px;transition:background .15s,color .15s;}
+.board-toggle-btn.on{background:var(--green);color:#000;}
+.board-toggle-btn:hover:not(.on){color:var(--text2);}
 .tgt-refresh-status{font-family:var(--font-mono);font-size:11px;color:var(--text3);letter-spacing:.5px;}
 .tgt-refresh-status.live{color:var(--green);}
 .tgt-refresh-status.loading{color:var(--amber);}
@@ -258,14 +263,14 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .tgt-card.value{border-left:3px solid var(--green);}
 .tgt-card.stash{border-left:3px solid var(--text3);}
 .tgt-rank{font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:center;}
-.tgt-info{display:flex;flex-direction:column;gap:3px;}
-.tgt-name{font-weight:600;font-size:14px;color:var(--text);}
+.tgt-info{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.tgt-name{font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .tgt-meta{font-size:11px;color:var(--text3);font-family:var(--font-mono);}
-.tgt-why{font-size:12px;color:var(--text2);margin-top:3px;line-height:1.5;}
+.tgt-why{font-size:12px;color:var(--text2);line-height:1.5;}
+.tgt-ps-badge{font-family:var(--font-mono);font-size:10px;background:#3B82F622;color:#60A5FA;padding:2px 6px;border-radius:4px;font-weight:500;}
 .tgt-price{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .tgt-bid{font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green);}
 .tgt-bid-label{font-family:var(--font-mono);font-size:10px;color:var(--text3);}
-.tgt-badges{display:flex;gap:5px;flex-wrap:wrap;}
 @media(max-width:640px){
   .tgt-roster-block{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
   .tgt-card{grid-template-columns:24px 1fr auto;gap:8px;padding:11px 12px;}
@@ -377,8 +382,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
   <button class="tab-btn" onclick="sw('draft',this)">Draft Tracker</button>
-  <button class="tab-btn" onclick="sw('targets',this)">Draft Targets</button>
-  <button class="tab-btn" onclick="sw('values',this)">Auction Values</button>
+  <button class="tab-btn" onclick="sw('board',this)">Board</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
 </div>
 <div class="tab-divider"></div>
@@ -467,85 +471,84 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   <div style="height:32px;"></div>
 </div>
 
-<!-- ========== AUCTION VALUES PANEL ========== -->
-<div class="panel" id="p-values">
-  <div class="callout">
-    <strong>Live from BigQuery</strong> — consensus target values for a <strong>$250 / 12-team Superflex + TE-premium</strong> startup.
-    Sources: Mike Clay/ESPN, Football Scout 365, CBS Sports, PFF (Jun 2026).
-    Target values appear in the Draft Tracker and Player Eval tabs automatically.
-  </div>
-  <div class="av-filter-bar">
-    <button class="av-filter-btn on" data-tier="ALL" onclick="avSetTier('ALL',this)">All tiers</button>
-    <button class="av-filter-btn" data-tier="TIER 1" onclick="avSetTier('TIER 1',this)">T1</button>
-    <button class="av-filter-btn" data-tier="TIER 2" onclick="avSetTier('TIER 2',this)">T2</button>
-    <button class="av-filter-btn" data-tier="TIER 3" onclick="avSetTier('TIER 3',this)">T3</button>
-    <button class="av-filter-btn" data-tier="TIER 4" onclick="avSetTier('TIER 4',this)">T4</button>
-    <button class="av-filter-btn" data-tier="TIER 5" onclick="avSetTier('TIER 5',this)">T5</button>
-    <button class="av-filter-btn" data-tier="TIER 6" onclick="avSetTier('TIER 6',this)">T6</button>
-    <div class="av-filter-sep"></div>
-    <button class="av-filter-btn" data-pos="QB" onclick="avSetPos('QB',this)">QB</button>
-    <button class="av-filter-btn" data-pos="RB" onclick="avSetPos('RB',this)">RB</button>
-    <button class="av-filter-btn" data-pos="WR" onclick="avSetPos('WR',this)">WR</button>
-    <button class="av-filter-btn" data-pos="TE" onclick="avSetPos('TE',this)">TE</button>
-    <div class="av-sort-wrap">
-      <label for="av-sort">Sort</label>
-      <select id="av-sort" onchange="renderAV()">
-        <option value="rank">Rank</option>
-        <option value="value">Value ↓</option>
-        <option value="pos">Position</option>
-      </select>
+<!-- ========== BOARD PANEL (Smart Targets + Full List) ========== -->
+<div class="panel" id="p-board">
+
+  <!-- Sub-view toggle + live refresh -->
+  <div class="board-head">
+    <div class="board-toggle">
+      <button class="board-toggle-btn on" id="bt-targets" onclick="boardView('targets')">Smart Targets</button>
+      <button class="board-toggle-btn" id="bt-list" onclick="boardView('list')">Full List</button>
+    </div>
+    <div class="board-head-right">
+      <div class="tgt-refresh-status" id="tgt-refresh-status">Reading live draft board…</div>
+      <button class="tgt-refresh-btn" id="tgt-refresh-btn" onclick="boardRefresh()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
     </div>
   </div>
-  <div id="av-load-status" style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-bottom:10px;min-height:16px;"></div>
-  <div class="av-table-wrap">
-    <table class="av-table">
-      <thead>
-        <tr>
-          <th style="width:30px;">#</th>
-          <th>Player</th>
-          <th style="width:42px;">Pos</th>
-          <th style="width:36px;">Age</th>
-          <th class="r" style="width:64px;">Target</th>
-          <th style="width:80px;">Tier</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody id="av-tbody"><tr><td colspan="7" class="av-empty">Loading…</td></tr></tbody>
-    </table>
-  </div>
-  <div style="height:32px;"></div>
-</div>
 
-<!-- ========== DRAFT TARGETS PANEL ========== -->
-<div class="panel" id="p-targets">
+  <!-- ── Sub-view: Smart Targets ── -->
+  <div id="board-targets">
+    <div class="tgt-roster-block" id="tgt-roster-block"></div>
 
-  <!-- Live refresh bar -->
-  <div class="tgt-refresh-bar">
-    <div class="tgt-refresh-status" id="tgt-refresh-status">Reading live draft board…</div>
-    <button class="tgt-refresh-btn" id="tgt-refresh-btn" onclick="renderTargets()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-      Refresh
-    </button>
+    <div class="section-label" id="tgt-label-need" style="display:none;">Priority Targets</div>
+    <div id="tgt-need" class="tgt-bucket"></div>
+
+    <div class="section-label" id="tgt-label-bav" style="display:none;">Best Available Value</div>
+    <div id="tgt-bav" class="tgt-bucket"></div>
+
+    <div class="section-label" id="tgt-label-stash" style="display:none;">Late Stash &amp; PS Targets</div>
+    <div id="tgt-stash" class="tgt-bucket"></div>
+
+    <div id="tgt-empty" class="eval-empty-state" style="display:none;">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <div>No auction values loaded yet — waiting on BigQuery.</div>
+    </div>
   </div>
 
-  <!-- Roster snapshot -->
-  <div class="tgt-roster-block" id="tgt-roster-block"></div>
-
-  <!-- Bucket: Must-Have Starters -->
-  <div class="section-label" id="tgt-label-need" style="display:none;">Priority Targets</div>
-  <div id="tgt-need" class="tgt-bucket"></div>
-
-  <!-- Bucket: Best Available Value -->
-  <div class="section-label" id="tgt-label-bav" style="display:none;">Best Available Value</div>
-  <div id="tgt-bav" class="tgt-bucket"></div>
-
-  <!-- Bucket: Late Stash / PS -->
-  <div class="section-label" id="tgt-label-stash" style="display:none;">Late Stash &amp; PS Targets</div>
-  <div id="tgt-stash" class="tgt-bucket"></div>
-
-  <div id="tgt-empty" class="eval-empty-state" style="display:none;">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-    <div>No auction values loaded yet — waiting on BigQuery.</div>
+  <!-- ── Sub-view: Full List ── -->
+  <div id="board-list" style="display:none;">
+    <div class="av-filter-bar">
+      <button class="av-filter-btn on" data-tier="ALL" onclick="avSetTier('ALL',this)">All tiers</button>
+      <button class="av-filter-btn" data-tier="TIER 1" onclick="avSetTier('TIER 1',this)">T1</button>
+      <button class="av-filter-btn" data-tier="TIER 2" onclick="avSetTier('TIER 2',this)">T2</button>
+      <button class="av-filter-btn" data-tier="TIER 3" onclick="avSetTier('TIER 3',this)">T3</button>
+      <button class="av-filter-btn" data-tier="TIER 4" onclick="avSetTier('TIER 4',this)">T4</button>
+      <button class="av-filter-btn" data-tier="TIER 5" onclick="avSetTier('TIER 5',this)">T5</button>
+      <button class="av-filter-btn" data-tier="TIER 6" onclick="avSetTier('TIER 6',this)">T6</button>
+      <div class="av-filter-sep"></div>
+      <button class="av-filter-btn" data-pos="QB" onclick="avSetPos('QB',this)">QB</button>
+      <button class="av-filter-btn" data-pos="RB" onclick="avSetPos('RB',this)">RB</button>
+      <button class="av-filter-btn" data-pos="WR" onclick="avSetPos('WR',this)">WR</button>
+      <button class="av-filter-btn" data-pos="TE" onclick="avSetPos('TE',this)">TE</button>
+      <div class="av-sort-wrap">
+        <label for="av-sort">Sort</label>
+        <select id="av-sort" onchange="renderAV()">
+          <option value="rank">Rank</option>
+          <option value="value">Value ↓</option>
+          <option value="pos">Position</option>
+        </select>
+      </div>
+    </div>
+    <div id="av-load-status" style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-bottom:10px;min-height:16px;"></div>
+    <div class="av-table-wrap">
+      <table class="av-table">
+        <thead>
+          <tr>
+            <th style="width:30px;">#</th>
+            <th>Player</th>
+            <th style="width:42px;">Pos</th>
+            <th style="width:36px;">Age</th>
+            <th class="r" style="width:64px;">Target</th>
+            <th style="width:80px;">Tier</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="av-tbody"><tr><td colspan="7" class="av-empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <div style="height:40px;"></div>
@@ -904,7 +907,26 @@ function sw(id,btn){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('on');
   if(id==='draft') updBudget();
-  if(id==='targets') renderTargets();
+  if(id==='board'){ boardView(boardCurrentView); }
+}
+
+// Refresh button — re-pull whichever sub-view is active. Both re-fetch live BQ data.
+function boardRefresh(){
+  if(boardCurrentView==='targets') renderTargets();
+  else loadAuctionValues();
+}
+
+// Board sub-view toggle: 'targets' (smart recommendations) or 'list' (full cheat sheet)
+let boardCurrentView='targets';
+function boardView(view){
+  boardCurrentView=view;
+  const isTargets=view==='targets';
+  document.getElementById('board-targets').style.display=isTargets?'block':'none';
+  document.getElementById('board-list').style.display=isTargets?'none':'block';
+  document.getElementById('bt-targets').classList.toggle('on',isTargets);
+  document.getElementById('bt-list').classList.toggle('on',!isTargets);
+  if(isTargets) renderTargets();
+  else renderAV();
 }
 
 function buildAlloc(){
@@ -1219,10 +1241,6 @@ function ageGrade(age) {
   return 'avoid';                   // dynasty risk
 }
 
-function recContract(age) {
-  const g = ageGrade(age);
-  return { elite:'4 yrs', prime:'3–4 yrs', peak:'2–3 yrs', decline:'1–2 yrs', avoid:'1 yr only', unknown:'2–3 yrs' }[g];
-}
 
 // PS-eligible: first two NFL years (2025 or 2026 rookies)
 const PS_NAMES = new Set([
@@ -1517,23 +1535,17 @@ function paintTargets(result, livePicks) {
     lbl.style.display = 'flex';
     el.innerHTML = cards.map(r => {
       const tierClass = r.tier==='TIER 1'?'t1':r.tier==='TIER 2'?'t2':r.tier==='TIER 3'?'t3':'t4';
-      const contractRec = r.age ? recContract(r.age) : '—';
-      const ageStr = r.age ? `${r.age}y` : '';
-      const ageClass = ageGrade(r.age||26);
-      const ageColor = {elite:'var(--green)',prime:'#60A5FA',peak:'var(--text2)',decline:'var(--amber)',avoid:'var(--red)',unknown:'var(--text3)'}[ageClass];
       const isPS = PS_NAMES.has(r.player_name.toLowerCase()) && r.auction_value <= 8;
       return `<div class="tgt-card ${r.bucket}">
         <div class="tgt-rank">#${r.rank}</div>
         <div class="tgt-info">
-          <div class="tgt-badges">
+          <div class="tgt-name">
+            ${r.player_name}
             <span class="ptag ${pc[r.position]||''}">${r.position}</span>
             <span class="tbadge ${tierClass}">${r.tier.replace('TIER ','T')}</span>
-            ${ageStr ? `<span style="font-family:var(--font-mono);font-size:10px;color:${ageColor};">${ageStr}</span>` : ''}
-            ${isPS ? '<span style="font-family:var(--font-mono);font-size:10px;background:#3B82F622;color:#60A5FA;padding:2px 6px;border-radius:4px;">PS</span>' : ''}
+            ${isPS ? '<span class="tgt-ps-badge">PS</span>' : ''}
           </div>
-          <div class="tgt-name">${r.player_name}</div>
           <div class="tgt-why">${r.why}</div>
-          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:3px;">Rec contract: ${contractRec}</div>
         </div>
         <div class="tgt-price">
           <div class="tgt-bid">$${r.auction_value}</div>
