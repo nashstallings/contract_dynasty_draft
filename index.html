@@ -512,7 +512,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   <div class="tgt-roster-block" id="tgt-roster-block"></div>
 
   <!-- Bucket: Must-Have Starters -->
-  <div class="section-label" id="tgt-label-need" style="display:none;">Fill Starter Needs</div>
+  <div class="section-label" id="tgt-label-need" style="display:none;">Priority Targets</div>
   <div id="tgt-need" class="tgt-bucket"></div>
 
   <!-- Bucket: Best Available Value -->
@@ -1181,93 +1181,226 @@ function drawEvalChart(weekly){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Draft Targets engine
+// Draft Targets — dynasty-aware targeting engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-// League roster requirements
-const ROSTER_NEEDS = { QB:2, RB:4, WR:5, TE:1 }; // starters + min bench per pos
-const STARTER_SLOTS = { QB:2, RB:2, WR:3, TE:1, FLEX:2, SF:1 };
+// Starter requirements for this league (QB, 2RB, 3WR, TE, 2FLEX, 1SF)
+// FLEX/SF absorb any skill position — we model min starters per position
+// then add a recommended bench depth per position
+const STARTER_MIN  = { QB:2, RB:2, WR:3, TE:1 }; // hard starter floors (FLEX/SF fill the rest)
+const BENCH_TARGET = { QB:1, RB:3, WR:3, TE:1 }; // target bench depth for a complete roster
+const TOTAL_TARGET = { QB:3, RB:5, WR:6, TE:2 }; // STARTER_MIN + BENCH_TARGET
 
-// PS-eligible rookies / year-2 players (auction_value <= $8, known young players)
-const PS_ELIGIBLE_NAMES = new Set([
+// Dynasty age tiers — drives contract length suggestions
+function ageGrade(age) {
+  if (!age) return 'unknown';
+  if (age <= 23) return 'elite';    // 4yr contract, max upside
+  if (age <= 26) return 'prime';    // 3-4yr
+  if (age <= 28) return 'peak';     // 2-3yr
+  if (age <= 30) return 'decline';  // 1-2yr max
+  return 'avoid';                   // dynasty risk
+}
+
+function recContract(age) {
+  const g = ageGrade(age);
+  return { elite:'4 yrs', prime:'3–4 yrs', peak:'2–3 yrs', decline:'1–2 yrs', avoid:'1 yr only', unknown:'2–3 yrs' }[g];
+}
+
+// PS-eligible: first two NFL years (2025 or 2026 rookies)
+const PS_NAMES = new Set([
   'jeremiyah love','omarion hampton','tetairoa mcmillan','colston loveland',
   'ashton jeanty','cam ward','travis hunter','keon coleman','luther burden iii',
-  'marvin harrison jr.','anthony richardson','braelon allen','jonathan brooks',
-  'jonathon brooks','roman wilson','zach charbonnet','xavier worthy',
-  'quentin johnston','wan\'dale robinson','josh downs','tyjae spears',
-  'tyrone tracy jr.','jahan dotson','chase brown'
+  'marvin harrison jr.','braelon allen','jonathan brooks','jonathon brooks',
+  'roman wilson','zach charbonnet','xavier worthy','quentin johnston',
+  'tyrone tracy jr.','tyjae spears','chris godwin jr.',
+  'emeka egbuka','harold fannin jr.','carnell tate','quinshon judkins'
 ]);
+
+// Whether having an elite QB already changes how we value QB2 vs. other positions
+function hasEliteQB() {
+  return players.some(p => p.pos === 'QB' && p.sal >= 40);
+}
+
+// ── Core scoring function ────────────────────────────────────────────────────
+// Returns a priority score (higher = more urgent to target)
+function scorePlayer(r, context) {
+  const { have, remaining, totalSpent, avgBid } = context;
+  const pos = r.position;
+  const av  = r.auction_value;
+  const age = r.age || 26;
+  let score = 0;
+
+  // 1. Positional need — exponentially more urgent as you fall behind
+  const havePos   = have[pos] || 0;
+  const starterMin = STARTER_MIN[pos] || 0;
+  const totalTgt  = TOTAL_TARGET[pos] || 0;
+  const shortage  = Math.max(0, starterMin - havePos);   // below starter floor
+  const depth_gap = Math.max(0, totalTgt - havePos);     // below full depth target
+  score += shortage * 40;    // red alert: below starter minimum
+  score += depth_gap * 12;   // moderate: below depth target
+
+  // 2. Positional scarcity adjustments for this specific league
+  // Superflex: having 0 QB2 after spending big on QB1 is a major gap
+  if (pos === 'QB' && havePos === 1 && hasEliteQB()) score += 35;
+  // RB is always scarce in dynasty — top RBs age out fast, pay up early
+  if (pos === 'RB' && havePos < 2) score += 20;
+  if (pos === 'RB' && havePos < 4) score += 8;
+  // TE premium (1.0 PPR): elite TE is $6-8 more valuable than SF baseline — prioritize early
+  if (pos === 'TE' && havePos === 0 && av >= 30) score += 25;
+  if (pos === 'TE' && havePos === 0) score += 15;
+  // WR depth: 3 starters + 2 FLEX means you need 5-6 WRs
+  if (pos === 'WR' && havePos < 3) score += 15;
+
+  // 3. Dynasty age bonus — young players are worth more in dynasty
+  const ag = ageGrade(age);
+  const ageBonus = { elite:20, prime:12, peak:4, decline:-8, avoid:-20, unknown:4 };
+  score += ageBonus[ag] || 0;
+
+  // 4. Tier quality bonus
+  const tierBonus = { 'TIER 1':18, 'TIER 2':12, 'TIER 3':6, 'TIER 4':2, 'TIER 5':0, 'TIER 6':-4 };
+  score += tierBonus[r.tier] || 0;
+
+  // 5. Budget fit — reward players who fit well in remaining budget
+  // Avoid recommending players that would consume >50% of remaining budget
+  const pctOfRemaining = av / Math.max(remaining, 1);
+  if (pctOfRemaining > 0.5) score -= 15;
+  if (pctOfRemaining > 0.7) score -= 20;
+  if (av <= avgBid * 0.6 && av <= 20) score += 8; // great value relative to avg
+
+  // 6. PS stash eligibility: bonus for $1-8 players who are PS-eligible
+  if (PS_NAMES.has(r.player_name.toLowerCase()) && av <= 8) score += 6;
+
+  return score;
+}
 
 function computeTargets() {
   if (!auctionValues.length) return null;
 
-  const spent = players.reduce((s, p) => s + p.sal, 0);
+  const spent     = players.reduce((s, p) => s + p.sal, 0);
   const remaining = 250 - spent;
-  const drafted = new Set(players.map(p => p.name.toLowerCase()));
+  const drafted   = new Set(players.map(p => p.name.toLowerCase()));
 
-  // Count what we have per position
+  // Current roster composition
   const have = { QB:0, RB:0, WR:0, TE:0 };
   players.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
 
-  // Slots still needed (starters only, conservative)
-  const still = {};
-  Object.keys(ROSTER_NEEDS).forEach(pos => {
-    still[pos] = Math.max(0, ROSTER_NEEDS[pos] - have[pos]);
+  // How many roster spots left (total target is 36: ~10 starters + 14 bench + 10 PS + 2 buffer)
+  const totalDrafted  = players.length;
+  const slotsLeft     = Math.max(1, 36 - totalDrafted);
+  const avgBid        = remaining / slotsLeft;
+
+  const context = { have, remaining, totalSpent: spent, avgBid };
+
+  // Available players sorted by priority score
+  const avail = auctionValues
+    .filter(r => !drafted.has(r.player_name.toLowerCase()) && r.auction_value <= remaining)
+    .map(r => ({ ...r, _score: scorePlayer(r, context) }))
+    .sort((a, b) => b._score - a._score);
+
+  const used = new Set();
+
+  // ── Bucket 1: Priority Targets ──────────────────────────────────────────
+  // Top 8 by score, but must span at least 3 positions if possible
+  // and must address the most urgent gaps first
+  const priorityPool = avail.filter(r => r._score >= 20);
+  const priorityCards = [];
+
+  // First pass: one per position for positions below starter minimum
+  ['QB','RB','WR','TE'].forEach(pos => {
+    const havePos = have[pos] || 0;
+    if (havePos >= STARTER_MIN[pos]) return;
+    const best = priorityPool.find(r => r.position === pos && !used.has(r.player_name));
+    if (best) { used.add(best.player_name); priorityCards.push({ ...best, bucket:'need', why: buildWhy(best, have, remaining, avgBid) }); }
   });
-  const totalSlotsLeft = Object.values(still).reduce((a, b) => a + b, 0);
 
-  // Available players (not yet drafted)
-  const avail = auctionValues.filter(r => !drafted.has(r.player_name.toLowerCase()));
-
-  // ── Bucket 1: Must-Have Starters ────────────────────────────────────────
-  // Best available player per position that still needs filling, budget-affordable
-  const needCards = [];
-  const usedInNeed = new Set();
-  const posOrder = ['QB','RB','WR','TE'];
-
-  posOrder.forEach(pos => {
-    if (still[pos] <= 0) return;
-    const candidates = avail
-      .filter(r => r.position === pos && !usedInNeed.has(r.player_name))
-      .sort((a, b) => a.rank - b.rank);
-
-    // Pick top N for this position (up to still[pos], max 3)
-    candidates.slice(0, Math.min(still[pos], 3)).forEach(r => {
-      usedInNeed.add(r.player_name);
-      needCards.push({ ...r, bucket:'need', why: buildWhy(r, still, remaining, totalSlotsLeft) });
-    });
+  // Second pass: fill to 8 with best remaining scores
+  avail.filter(r => !used.has(r.player_name)).slice(0, 8 - priorityCards.length).forEach(r => {
+    used.add(r.player_name);
+    priorityCards.push({ ...r, bucket:'need', why: buildWhy(r, have, remaining, avgBid) });
   });
 
-  // ── Bucket 2: Best Available Value ──────────────────────────────────────
-  // Top remaining players by tier/rank, affordable, not in need bucket
-  const bavCards = avail
-    .filter(r => !usedInNeed.has(r.player_name) && r.auction_value <= remaining)
-    .sort((a, b) => a.rank - b.rank)
-    .slice(0, 8)
-    .map(r => ({ ...r, bucket:'value', why: buildWhy(r, still, remaining, totalSlotsLeft) }));
+  // ── Bucket 2: Value Targets ──────────────────────────────────────────────
+  // Next tier: good value players not already surfaced, skewed toward age & rank
+  // These are players you'd be happy landing at their price — not urgent but smart
+  const valueCards = avail
+    .filter(r => !used.has(r.player_name) && r.auction_value >= 8 && r.rank <= 80)
+    .sort((a, b) => {
+      // Re-sort by rank for this bucket — best available regardless of need urgency
+      return a.rank - b.rank;
+    })
+    .slice(0, 6)
+    .map(r => { used.add(r.player_name); return { ...r, bucket:'value', why: buildWhy(r, have, remaining, avgBid) }; });
 
   // ── Bucket 3: Late Stash / PS ────────────────────────────────────────────
+  // $1-8 players, PS-eligible or just cheap high-upside youth
   const stashCards = avail
-    .filter(r => {
-      const nm = r.player_name.toLowerCase();
-      return (PS_ELIGIBLE_NAMES.has(nm) || r.auction_value <= 5) && r.auction_value <= 8
-        && !usedInNeed.has(r.player_name) && !bavCards.find(b => b.player_name === r.player_name);
+    .filter(r => !used.has(r.player_name) && r.auction_value <= 8)
+    .sort((a, b) => {
+      // PS-eligible first, then by rank
+      const aPS = PS_NAMES.has(a.player_name.toLowerCase()) ? 1 : 0;
+      const bPS = PS_NAMES.has(b.player_name.toLowerCase()) ? 1 : 0;
+      if (bPS !== aPS) return bPS - aPS;
+      return a.rank - b.rank;
     })
-    .sort((a, b) => a.rank - b.rank)
-    .slice(0, 6)
-    .map(r => ({ ...r, bucket:'stash', why: buildWhy(r, still, remaining, totalSlotsLeft) }));
+    .slice(0, 8)
+    .map(r => ({ ...r, bucket:'stash', why: buildWhy(r, have, remaining, avgBid) }));
 
-  return { have, still, remaining, spent, needCards, bavCards, stashCards };
+  return { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards };
 }
 
-function buildWhy(r, still, remaining, slotsLeft) {
+// ── Why string — dynasty-expert rationale per player ────────────────────────
+function buildWhy(r, have, remaining, avgBid) {
+  const pos = r.position;
+  const age = r.age || 26;
+  const ag  = ageGrade(age);
   const parts = [];
-  if (still[r.position] > 0) parts.push(`Need ${still[r.position]} more ${r.position}`);
-  if (r.tier === 'TIER 1' || r.tier === 'TIER 2') parts.push(`${r.tier_desc} — elite value`);
-  if (r.ranking_note) parts.push(r.ranking_note.split('—')[0].trim());
-  const avgLeft = slotsLeft > 0 ? Math.round(remaining / slotsLeft) : 0;
-  if (r.auction_value <= avgLeft * 0.6 && r.auction_value <= 15) parts.push(`Budget friendly at $${r.auction_value}`);
-  return parts.slice(0, 2).join(' · ') || r.tier_desc || '';
+
+  // Positional context
+  const havePos = have[pos] || 0;
+  if (havePos < (STARTER_MIN[pos] || 0)) {
+    parts.push(`Need ${pos} starter (have ${havePos}/${STARTER_MIN[pos]})`);
+  } else if (havePos < (TOTAL_TARGET[pos] || 0)) {
+    parts.push(`${pos} depth (have ${havePos}, want ${TOTAL_TARGET[pos]})`);
+  }
+
+  // Superflex-specific QB note
+  if (pos === 'QB' && havePos === 1 && hasEliteQB()) {
+    parts.push('QB2 in SF is a starter every week');
+  }
+
+  // TE premium note
+  if (pos === 'TE' && havePos === 0 && r.auction_value >= 25) {
+    parts.push('Elite TE worth +$6–8 in 1.0 PPR TEP');
+  }
+
+  // RB age-scarcity
+  if (pos === 'RB' && ag === 'elite') parts.push('Young workhorse — dynasty cornerstone');
+  if (pos === 'RB' && ag === 'prime') parts.push('In prime now, short window — lock up');
+
+  // Age-based contract recommendation
+  if (ag === 'elite') parts.push(`Age ${age} — max 4yr deal`);
+  else if (ag === 'prime') parts.push(`Age ${age} — 3–4yr deal`);
+  else if (ag === 'peak') parts.push(`Age ${age} — 2–3yr, don't overcommit`);
+  else if (ag === 'decline') parts.push(`Age ${age} — 1–2yr only`);
+  else if (ag === 'avoid') parts.push(`Age ${age} — 1yr max, dynasty risk`);
+
+  // Budget-value note
+  if (r.auction_value <= avgBid * 0.5 && r.auction_value >= 10) {
+    parts.push(`Underpriced vs. your avg bid ($${Math.round(avgBid)})`);
+  }
+
+  // PS eligibility
+  if (PS_NAMES.has(r.player_name.toLowerCase()) && r.auction_value <= 8) {
+    parts.push('PS-eligible — stash at $1–3, retain at 25%');
+  }
+
+  // Ranking note from BQ (if short and adds context)
+  if (parts.length < 2 && r.ranking_note) {
+    const note = r.ranking_note.split('—').pop().trim();
+    if (note.length > 5) parts.push(note);
+  }
+
+  return parts.slice(0, 2).join(' · ');
 }
 
 function renderTargets() {
@@ -1276,68 +1409,76 @@ function renderTargets() {
   if (!result) {
     document.getElementById('tgt-empty').style.display = 'flex';
     document.getElementById('tgt-roster-block').innerHTML = '';
+    ['tgt-label-need','tgt-label-bav','tgt-label-stash'].forEach(id => document.getElementById(id).style.display='none');
+    ['tgt-need','tgt-bav','tgt-stash'].forEach(id => document.getElementById(id).innerHTML='');
     return;
   }
   document.getElementById('tgt-empty').style.display = 'none';
 
-  const { have, still, remaining, spent, needCards, bavCards, stashCards } = result;
+  const { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards } = result;
   const pc = { QB:'pQB', WR:'pWR', RB:'pRB', TE:'pTE' };
 
-  // ── Roster snapshot grid ─────────────────────────────────────────────────
-  const posColors = {
-    QB: { ok:'#3B82F6', label:'QBs' },
-    RB: { ok:'#F5A623', label:'RBs' },
-    WR: { ok:'#00C97A', label:'WRs' },
-    TE: { ok:'#E879B0', label:'TEs' },
-  };
-  const avgPerSlot = (250 - remaining > 0 && players.length > 0)
-    ? Math.round(remaining / Math.max(1, 36 - players.length)) : '—';
+  // ── Roster snapshot ───────────────────────────────────────────────────────
+  const posColors = { QB:'#3B82F6', RB:'#F5A623', WR:'#00C97A', TE:'#E879B0' };
+  const posLabels = { QB:'QBs', RB:'RBs', WR:'WRs', TE:'TEs' };
+  const slotsLeft = Math.max(1, 36 - players.length);
+  const avgDisplay = remaining > 0 ? '$' + Math.round(avgBid) : '—';
 
-  document.getElementById('tgt-roster-block').innerHTML = `
-    ${Object.entries(ROSTER_NEEDS).map(([pos, need]) => {
+  document.getElementById('tgt-roster-block').innerHTML =
+    Object.keys(STARTER_MIN).map(pos => {
       const h = have[pos] || 0;
+      const need = STARTER_MIN[pos];
       const isOk = h >= need;
-      const col = isOk ? posColors[pos].ok : 'var(--red)';
+      const col = isOk ? posColors[pos] : 'var(--red)';
       return `<div class="tgt-pos-card ${isOk ? 'ok' : 'needs'}">
-        <div class="tgt-pos-label">${posColors[pos].label}</div>
-        <div class="tgt-pos-count" style="color:${col};">${h}<span style="font-size:14px;font-weight:400;color:var(--text3);">/${need}</span></div>
-        <div class="tgt-pos-need">${isOk ? '✓ Starters covered' : `Need ${need - h} more`}</div>
+        <div class="tgt-pos-label">${posLabels[pos]}</div>
+        <div class="tgt-pos-count" style="color:${col};">${h}<span style="font-size:14px;font-weight:400;color:var(--text3);">/${TOTAL_TARGET[pos]}</span></div>
+        <div class="tgt-pos-need">${isOk ? `✓ ${need} starters set` : `⚠ Need ${need - h} starters`}</div>
       </div>`;
-    }).join('')}
-    <div class="tgt-pos-card">
+    }).join('') +
+    `<div class="tgt-pos-card" style="border-color:${remaining > 100 ? 'var(--green-mid)' : remaining > 50 ? '#F5A62344' : '#F04D4D44'};">
       <div class="tgt-pos-label">Budget left</div>
-      <div class="tgt-pos-count" style="color:${remaining > 80 ? 'var(--green)' : remaining > 40 ? 'var(--amber)' : 'var(--red)'};">$${remaining}</div>
-      <div class="tgt-pos-need">~$${avgPerSlot}/slot remaining</div>
+      <div class="tgt-pos-count" style="color:${remaining > 100 ? 'var(--green)' : remaining > 50 ? 'var(--amber)' : 'var(--red)'};">$${remaining}</div>
+      <div class="tgt-pos-need">${avgDisplay}/slot · ${slotsLeft} spots left</div>
     </div>`;
 
-  // ── Render a bucket ───────────────────────────────────────────────────────
-  function renderBucket(cards, labelId, bucketId, emptyMsg) {
+  // ── Card renderer ─────────────────────────────────────────────────────────
+  function renderBucket(cards, labelId, bucketId) {
     const lbl = document.getElementById(labelId);
     const el  = document.getElementById(bucketId);
     if (!cards.length) { lbl.style.display='none'; el.innerHTML=''; return; }
-    lbl.style.display='flex';
-    el.innerHTML = cards.map(r => `
-      <div class="tgt-card ${r.bucket}">
+    lbl.style.display = 'flex';
+    el.innerHTML = cards.map(r => {
+      const tierClass = r.tier==='TIER 1'?'t1':r.tier==='TIER 2'?'t2':r.tier==='TIER 3'?'t3':'t4';
+      const contractRec = r.age ? recContract(r.age) : '—';
+      const ageStr = r.age ? `${r.age}y` : '';
+      const ageClass = ageGrade(r.age||26);
+      const ageColor = {elite:'var(--green)',prime:'#60A5FA',peak:'var(--text2)',decline:'var(--amber)',avoid:'var(--red)',unknown:'var(--text3)'}[ageClass];
+      const isPS = PS_NAMES.has(r.player_name.toLowerCase()) && r.auction_value <= 8;
+      return `<div class="tgt-card ${r.bucket}">
         <div class="tgt-rank">#${r.rank}</div>
         <div class="tgt-info">
           <div class="tgt-badges">
             <span class="ptag ${pc[r.position]||''}">${r.position}</span>
-            <span class="tbadge ${r.tier==='TIER 1'?'t1':r.tier==='TIER 2'?'t2':r.tier==='TIER 3'?'t3':'t4'}">${r.tier.replace('TIER ','T')}</span>
-            ${r.age ? `<span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);">${r.age}y</span>` : ''}
+            <span class="tbadge ${tierClass}">${r.tier.replace('TIER ','T')}</span>
+            ${ageStr ? `<span style="font-family:var(--font-mono);font-size:10px;color:${ageColor};">${ageStr}</span>` : ''}
+            ${isPS ? '<span style="font-family:var(--font-mono);font-size:10px;background:#3B82F622;color:#60A5FA;padding:2px 6px;border-radius:4px;">PS</span>' : ''}
           </div>
           <div class="tgt-name">${r.player_name}</div>
           <div class="tgt-why">${r.why}</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:3px;">Rec contract: ${contractRec}</div>
         </div>
         <div class="tgt-price">
           <div class="tgt-bid">$${r.auction_value}</div>
           <div class="tgt-bid-label">target bid</div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
-  renderBucket(needCards, 'tgt-label-need', 'tgt-need');
-  renderBucket(bavCards,  'tgt-label-bav',  'tgt-bav');
-  renderBucket(stashCards,'tgt-label-stash','tgt-stash');
+  renderBucket(priorityCards, 'tgt-label-need', 'tgt-need');
+  renderBucket(valueCards,    'tgt-label-bav',  'tgt-bav');
+  renderBucket(stashCards,    'tgt-label-stash','tgt-stash');
 }
 
 
