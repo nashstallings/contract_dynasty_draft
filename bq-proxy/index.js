@@ -55,7 +55,8 @@ exports.draftPicksInsert = async (req, res) => {
               av.tier,
               av.tier_desc,
               av.ranking_note,
-              CAST(FLOOR(pl.age) AS INT64) AS age
+              CAST(FLOOR(pl.age) AS INT64) AS age,
+              pl.latest_team AS team
             FROM \`${PROJECT}.dynasty_tycoon.player_auction_values\` av
             LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl
               ON pl.gsis_id = av.player_id
@@ -66,6 +67,164 @@ exports.draftPicksInsert = async (req, res) => {
       } catch (err) {
         console.error('Auction values load error:', err);
         res.status(500).json({ error: 'Failed to load auction values', message: err.message });
+      }
+      return;
+    }
+
+    // ?targets=1  →  live draft targets computed from draft_picks + player_auction_values
+    if (req.query.targets === '1') {
+      try {
+        // Single query: join auction values against current picks to get
+        // undrafted players scored by positional need, age, tier, and budget fit
+        const [rows] = await bq.query({
+          query: `
+            WITH
+            -- Current roster state
+            picks AS (
+              SELECT
+                player_name,
+                position,
+                salary,
+                SUM(salary) OVER () AS total_spent,
+                COUNT(*) OVER ()    AS total_drafted
+              FROM \`${PROJECT}.${DATASET}.${TABLE}\`
+            ),
+            roster_summary AS (
+              SELECT
+                COALESCE(SUM(salary), 0)  AS total_spent,
+                COALESCE(COUNT(*), 0)     AS total_drafted,
+                COALESCE(SUM(CASE WHEN position = 'QB' THEN 1 ELSE 0 END), 0) AS have_qb,
+                COALESCE(SUM(CASE WHEN position = 'RB' THEN 1 ELSE 0 END), 0) AS have_rb,
+                COALESCE(SUM(CASE WHEN position = 'WR' THEN 1 ELSE 0 END), 0) AS have_wr,
+                COALESCE(SUM(CASE WHEN position = 'TE' THEN 1 ELSE 0 END), 0) AS have_te,
+                COALESCE(MAX(CASE WHEN position = 'QB' AND salary >= 40 THEN 1 ELSE 0 END), 0) AS has_elite_qb
+              FROM \`${PROJECT}.${DATASET}.${TABLE}\`
+            ),
+            -- Available undrafted players with age joined in
+            available AS (
+              SELECT
+                av.player_name,
+                av.position,
+                av.rank,
+                av.auction_value,
+                av.tier,
+                av.tier_desc,
+                av.ranking_note,
+                CAST(FLOOR(pl.age) AS INT64) AS age
+              FROM \`${PROJECT}.dynasty_tycoon.player_auction_values\` av
+              LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl ON pl.gsis_id = av.player_id
+              WHERE NOT EXISTS (
+                SELECT 1 FROM \`${PROJECT}.${DATASET}.${TABLE}\` dp
+                WHERE LOWER(dp.player_name) = LOWER(av.player_name)
+              )
+            ),
+            -- Score every available player against current roster state
+            scored AS (
+              SELECT
+                a.*,
+                rs.total_spent,
+                rs.total_drafted,
+                rs.have_qb,
+                rs.have_rb,
+                rs.have_wr,
+                rs.have_te,
+                rs.has_elite_qb,
+                (250 - rs.total_spent) AS remaining,
+                SAFE_DIVIDE(250 - rs.total_spent, GREATEST(36 - rs.total_drafted, 1)) AS avg_bid,
+
+                -- Positional need score (starter floors: QB=2, RB=2, WR=3, TE=1)
+                CASE a.position
+                  WHEN 'QB' THEN
+                    CASE WHEN rs.have_qb = 0 THEN 50
+                         WHEN rs.have_qb = 1 AND rs.has_elite_qb = 1 THEN 42  -- QB2 in SF starts every week
+                         WHEN rs.have_qb = 1 THEN 40
+                         WHEN rs.have_qb < 3 THEN 14
+                         ELSE 2 END
+                  WHEN 'RB' THEN
+                    CASE WHEN rs.have_rb = 0 THEN 50
+                         WHEN rs.have_rb = 1 THEN 44
+                         WHEN rs.have_rb < 4 THEN 20
+                         WHEN rs.have_rb < 6 THEN 8
+                         ELSE 0 END
+                  WHEN 'WR' THEN
+                    CASE WHEN rs.have_wr = 0 THEN 46
+                         WHEN rs.have_wr = 1 THEN 38
+                         WHEN rs.have_wr = 2 THEN 28
+                         WHEN rs.have_wr < 5 THEN 16
+                         WHEN rs.have_wr < 7 THEN 6
+                         ELSE 0 END
+                  WHEN 'TE' THEN
+                    CASE WHEN rs.have_te = 0 AND a.auction_value >= 30 THEN 44
+                         WHEN rs.have_te = 0 THEN 30
+                         WHEN rs.have_te < 2 THEN 8
+                         ELSE 0 END
+                  ELSE 0
+                END AS need_score,
+
+                -- Dynasty age score
+                CASE
+                  WHEN a.age IS NULL   THEN 4
+                  WHEN a.age <= 23     THEN 20
+                  WHEN a.age <= 26     THEN 12
+                  WHEN a.age <= 28     THEN 4
+                  WHEN a.age <= 30     THEN -8
+                  ELSE -20
+                END AS age_score,
+
+                -- Tier quality score
+                CASE a.tier
+                  WHEN 'TIER 1' THEN 18
+                  WHEN 'TIER 2' THEN 12
+                  WHEN 'TIER 3' THEN 6
+                  WHEN 'TIER 4' THEN 2
+                  ELSE 0
+                END AS tier_score,
+
+                -- Budget fit score: penalise if too expensive relative to remaining
+                CASE
+                  WHEN a.auction_value > (250 - rs.total_spent) * 0.7 THEN -25
+                  WHEN a.auction_value > (250 - rs.total_spent) * 0.5 THEN -12
+                  WHEN a.auction_value <= SAFE_DIVIDE(250 - rs.total_spent, GREATEST(36 - rs.total_drafted, 1)) * 0.6
+                    AND a.auction_value <= 20 THEN 8
+                  ELSE 0
+                END AS budget_score
+
+              FROM available a
+              CROSS JOIN roster_summary rs
+              WHERE a.auction_value <= (250 - rs.total_spent)
+            )
+
+            SELECT
+              player_name,
+              position,
+              rank,
+              auction_value,
+              tier,
+              tier_desc,
+              ranking_note,
+              age,
+              remaining,
+              avg_bid,
+              have_qb, have_rb, have_wr, have_te,
+              (need_score + age_score + tier_score + budget_score) AS total_score,
+              need_score,
+              age_score,
+              tier_score,
+              budget_score,
+              -- Bucket assignment
+              CASE
+                WHEN auction_value <= 8 THEN 'stash'
+                WHEN (need_score + age_score + tier_score + budget_score) >= 30 THEN 'priority'
+                ELSE 'value'
+              END AS bucket
+            FROM scored
+            ORDER BY bucket, total_score DESC, rank ASC
+          `,
+        });
+        res.status(200).json({ targets: rows });
+      } catch (err) {
+        console.error('Targets load error:', err);
+        res.status(500).json({ error: 'Failed to load targets', message: err.message });
       }
       return;
     }
