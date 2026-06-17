@@ -709,7 +709,7 @@ function renderAV(){
     }
     html+=`<tr class="${tClass[r.tier]||''}">
       <td class="av-rank">${r.rank}</td>
-      <td style="font-weight:500;color:var(--text);">${r.player_name}</td>
+      <td style="font-weight:500;color:var(--text);">${r.player_name}${r.team ? ' - ' + r.team : ''}</td>
       <td><span class="ptag ${pc[r.position]||''}">${r.position}</span></td>
       <td style="color:var(--text2);font-family:var(--font-mono);font-size:12px;">${r.age??'—'}</td>
       <td class="r"><span class="av-val">$${r.auction_value}</span></td>
@@ -1540,7 +1540,7 @@ function paintTargets(result, livePicks) {
         <div class="tgt-rank">#${r.rank}</div>
         <div class="tgt-info">
           <div class="tgt-name">
-            ${r.player_name}
+            ${r.player_name}${r.team ? ' - ' + r.team : ''}
             <span class="ptag ${pc[r.position]||''}">${r.position}</span>
             <span class="tbadge ${tierClass}">${r.tier.replace('TIER ','T')}</span>
             ${isPS ? '<span class="tgt-ps-badge">PS</span>' : ''}
