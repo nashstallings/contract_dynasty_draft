@@ -390,7 +390,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
-  <button class="tab-btn" onclick="sw('draft',this)">Draft Tracker</button>
   <button class="tab-btn" onclick="sw('board',this)">Board</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
 </div>
@@ -434,75 +433,14 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 </div>
 
 <!-- ========== DRAFT TRACKER PANEL ========== -->
-<div class="panel" id="p-draft">
-  <div class="callout-amber"><strong>Remember:</strong> Your $50 FAAB holdback is separate from this $250 draft budget. Don't mentally spend your FAAB during the auction.</div>
-
-  <!-- Add player form (logs the winning bid + which team won it) -->
-  <div class="add-form-card">
-    <div class="form-title">Log a won player</div>
-    <div class="form-row-new">
-      <div class="fg">
-        <label>Player name</label>
-        <div class="player-search-wrap">
-          <input type="text" id="pn" placeholder="Search by name…" autocomplete="off" oninput="onPlayerSearch(this.value)" onkeydown="onSearchKey(event)"/>
-          <div class="typeahead-dropdown" id="td"></div>
-        </div>
-      </div>
-      <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
-      <div class="fg"><label>Contract</label>
-        <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
-      </div>
-      <div class="fg"><label>Won by</label>
-        <select id="powner" onchange="draftOwner=this.value"></select>
-      </div>
-      <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addP()">+ Add</button></div>
-    </div>
-    <div class="form-autofill-row" id="autofill-row">
-      <span class="autofill-badge empty" id="af-pos">Pos —</span>
-      <span class="autofill-badge empty" id="af-age">Age —</span>
-      <span class="autofill-badge empty" id="af-team">Team —</span>
-      <span class="autofill-badge empty" id="af-av">Target —</span>
-    </div>
-    <div style="margin-top:10px;min-height:18px;">
-      <span id="bq-status" style="font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;opacity:0;transition:opacity .3s;"></span>
-    </div>
-  </div>
-
-  <!-- Team selector: whose roster am I viewing -->
-  <div class="team-selector-bar">
-    <label class="team-selector-label">Viewing roster</label>
-    <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
-    <div class="team-selector-spacer"></div>
-    <div class="team-league-summary" id="team-league-summary"></div>
-  </div>
-
-  <!-- Budget block for the viewed team -->
-  <div class="budget-block">
-    <div class="budget-metrics" id="bmet"></div>
-    <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
-    <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
-    <div class="pos-pills" id="pos-pills"></div>
-  </div>
-
-  <div class="player-list-card" id="plist-wrap">
-    <div class="player-list-header">
-      <span>Player</span><span style="text-align:center;">Pos</span>
-      <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
-      <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
-      <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
-    </div>
-    <div id="plist"><div class="empty-state">No players added yet — log your first pick above.</div></div>
-  </div>
-  <div style="height:32px;"></div>
-</div>
-
-<!-- ========== BOARD PANEL (Smart Targets + Full List) ========== -->
+<!-- ========== BOARD PANEL (Tracker + Smart Targets + Full List) ========== -->
 <div class="panel" id="p-board">
 
   <!-- Sub-view toggle + live refresh -->
   <div class="board-head">
     <div class="board-toggle">
-      <button class="board-toggle-btn on" id="bt-targets" onclick="boardView('targets')">Smart Targets</button>
+      <button class="board-toggle-btn on" id="bt-tracker" onclick="boardView('tracker')">Tracker</button>
+      <button class="board-toggle-btn" id="bt-targets" onclick="boardView('targets')">Smart Targets</button>
       <button class="board-toggle-btn" id="bt-list" onclick="boardView('list')">Full List</button>
     </div>
     <div class="board-head-right">
@@ -514,8 +452,70 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     </div>
   </div>
 
+  <!-- ── Sub-view: Tracker ── -->
+  <div id="board-tracker">
+    <div class="callout-amber"><strong>Remember:</strong> Your $50 FAAB holdback is separate from this $250 draft budget. Don't mentally spend your FAAB during the auction.</div>
+
+    <!-- Add player form (logs the winning bid + which team won it) -->
+    <div class="add-form-card">
+      <div class="form-title">Log a won player</div>
+      <div class="form-row-new">
+        <div class="fg">
+          <label>Player name</label>
+          <div class="player-search-wrap">
+            <input type="text" id="pn" placeholder="Search by name…" autocomplete="off" oninput="onPlayerSearch(this.value)" onkeydown="onSearchKey(event)"/>
+            <div class="typeahead-dropdown" id="td"></div>
+          </div>
+        </div>
+        <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
+        <div class="fg"><label>Contract</label>
+          <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
+        </div>
+        <div class="fg"><label>Won by</label>
+          <select id="powner" onchange="draftOwner=this.value"></select>
+        </div>
+        <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addP()">+ Add</button></div>
+      </div>
+      <div class="form-autofill-row" id="autofill-row">
+        <span class="autofill-badge empty" id="af-pos">Pos —</span>
+        <span class="autofill-badge empty" id="af-age">Age —</span>
+        <span class="autofill-badge empty" id="af-team">Team —</span>
+        <span class="autofill-badge empty" id="af-av">Target —</span>
+      </div>
+      <div style="margin-top:10px;min-height:18px;">
+        <span id="bq-status" style="font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;opacity:0;transition:opacity .3s;"></span>
+      </div>
+    </div>
+
+    <!-- Team selector: whose roster am I viewing -->
+    <div class="team-selector-bar">
+      <label class="team-selector-label">Viewing roster</label>
+      <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
+      <div class="team-selector-spacer"></div>
+      <div class="team-league-summary" id="team-league-summary"></div>
+    </div>
+
+    <!-- Budget block for the viewed team -->
+    <div class="budget-block">
+      <div class="budget-metrics" id="bmet"></div>
+      <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
+      <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
+      <div class="pos-pills" id="pos-pills"></div>
+    </div>
+
+    <div class="player-list-card" id="plist-wrap">
+      <div class="player-list-header">
+        <span>Player</span><span style="text-align:center;">Pos</span>
+        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
+        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
+        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
+      </div>
+      <div id="plist"><div class="empty-state">No players added yet — log your first pick above.</div></div>
+    </div>
+  </div>
+
   <!-- ── Sub-view: Smart Targets ── -->
-  <div id="board-targets">
+  <div id="board-targets" style="display:none;">
     <div class="tgt-roster-block" id="tgt-roster-block"></div>
 
     <div class="section-label" id="tgt-label-need" style="display:none;">Priority Targets</div>
@@ -938,26 +938,30 @@ function sw(id,btn){
   btn.classList.add('on');
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('on');
-  if(id==='draft') updBudget();
   if(id==='board'){ boardView(boardCurrentView); }
 }
 
-// Refresh button — re-pull whichever sub-view is active. Both re-fetch live BQ data.
+// Refresh button — re-pull whichever sub-view is active. All re-fetch live BQ data.
 function boardRefresh(){
-  if(boardCurrentView==='targets') renderTargets();
+  if(boardCurrentView==='tracker') loadFromBQ();
+  else if(boardCurrentView==='targets') renderTargets();
   else loadAuctionValues();
 }
 
-// Board sub-view toggle: 'targets' (smart recommendations) or 'list' (full cheat sheet)
-let boardCurrentView='targets';
+// Board sub-view toggle: 'tracker' (log picks + rosters), 'targets' (recommendations), 'list' (cheat sheet)
+let boardCurrentView='tracker';
 function boardView(view){
   boardCurrentView=view;
-  const isTargets=view==='targets';
-  document.getElementById('board-targets').style.display=isTargets?'block':'none';
-  document.getElementById('board-list').style.display=isTargets?'none':'block';
-  document.getElementById('bt-targets').classList.toggle('on',isTargets);
-  document.getElementById('bt-list').classList.toggle('on',!isTargets);
-  if(isTargets) renderTargets();
+  const views={tracker:'board-tracker',targets:'board-targets',list:'board-list'};
+  const btns ={tracker:'bt-tracker',  targets:'bt-targets',  list:'bt-list'};
+  Object.entries(views).forEach(([k,id])=>{
+    document.getElementById(id).style.display = (k===view)?'block':'none';
+  });
+  Object.entries(btns).forEach(([k,id])=>{
+    document.getElementById(id).classList.toggle('on',k===view);
+  });
+  if(view==='tracker') updBudget();
+  else if(view==='targets') renderTargets();
   else renderAV();
 }
 
