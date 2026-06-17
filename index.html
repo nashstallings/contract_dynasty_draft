@@ -228,6 +228,17 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .eval-proj-empty{color:var(--text3);font-weight:400;}
 
 /* ── Draft Targets ── */
+.tgt-refresh-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.tgt-refresh-status{font-family:var(--font-mono);font-size:11px;color:var(--text3);letter-spacing:.5px;}
+.tgt-refresh-status.live{color:var(--green);}
+.tgt-refresh-status.loading{color:var(--amber);}
+.tgt-refresh-status.error{color:var(--red);}
+.tgt-refresh-btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-head);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:7px 14px;background:var(--card2);border:1px solid var(--border2);color:var(--text2);border-radius:7px;cursor:pointer;transition:background .15s,color .15s,border-color .15s;}
+.tgt-refresh-btn:hover{background:var(--card);color:var(--text);border-color:var(--green-mid);}
+.tgt-refresh-btn:active{transform:scale(.97);}
+.tgt-refresh-btn svg{transition:transform .4s;}
+.tgt-refresh-btn.spinning svg{animation:spin .7s linear infinite;}
+@keyframes spin{from{transform:rotate(0);}to{transform:rotate(360deg);}}
 .tgt-roster-block{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px;}
 .tgt-pos-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
 .tgt-pos-card.needs{border-color:#F04D4D55;background:#F04D4D08;}
@@ -507,6 +518,15 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 <!-- ========== DRAFT TARGETS PANEL ========== -->
 <div class="panel" id="p-targets">
+
+  <!-- Live refresh bar -->
+  <div class="tgt-refresh-bar">
+    <div class="tgt-refresh-status" id="tgt-refresh-status">Reading live draft board…</div>
+    <button class="tgt-refresh-btn" id="tgt-refresh-btn" onclick="renderTargets()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
 
   <!-- Roster snapshot -->
   <div class="tgt-roster-block" id="tgt-roster-block"></div>
@@ -951,8 +971,6 @@ function updBudget(){
   document.getElementById('pos-pills').innerHTML=Object.entries(cnts).map(([pos,n])=>
     `<span class="pos-pill" style="background:${bcol[pos]||'var(--card2)'};color:${tcol[pos]||'var(--text2)'};border-color:${tcol[pos]||'var(--border)'}33;">${pos}: ${n}</span>`).join('');
   renderPlayers();
-  // keep targets fresh any time roster changes
-  if(document.getElementById('p-targets').classList.contains('on')) renderTargets();
 }
 
 function renderPlayers(){
@@ -1217,14 +1235,14 @@ const PS_NAMES = new Set([
 ]);
 
 // Whether having an elite QB already changes how we value QB2 vs. other positions
-function hasEliteQB() {
-  return players.some(p => p.pos === 'QB' && p.sal >= 40);
+function hasEliteQB(picks) {
+  return picks.some(p => p.pos === 'QB' && p.sal >= 40);
 }
 
 // ── Core scoring function ────────────────────────────────────────────────────
 // Returns a priority score (higher = more urgent to target)
 function scorePlayer(r, context) {
-  const { have, remaining, totalSpent, avgBid } = context;
+  const { have, remaining, totalSpent, avgBid, picks } = context;
   const pos = r.position;
   const av  = r.auction_value;
   const age = r.age || 26;
@@ -1241,7 +1259,7 @@ function scorePlayer(r, context) {
 
   // 2. Positional scarcity adjustments for this specific league
   // Superflex: having 0 QB2 after spending big on QB1 is a major gap
-  if (pos === 'QB' && havePos === 1 && hasEliteQB()) score += 35;
+  if (pos === 'QB' && havePos === 1 && hasEliteQB(picks)) score += 35;
   // RB is always scarce in dynasty — top RBs age out fast, pay up early
   if (pos === 'RB' && havePos < 2) score += 20;
   if (pos === 'RB' && havePos < 4) score += 8;
@@ -1273,23 +1291,23 @@ function scorePlayer(r, context) {
   return score;
 }
 
-function computeTargets() {
+function computeTargets(picks) {
   if (!auctionValues.length) return null;
 
-  const spent     = players.reduce((s, p) => s + p.sal, 0);
+  const spent     = picks.reduce((s, p) => s + p.sal, 0);
   const remaining = 250 - spent;
-  const drafted   = new Set(players.map(p => p.name.toLowerCase()));
+  const drafted   = new Set(picks.map(p => p.name.toLowerCase()));
 
   // Current roster composition
   const have = { QB:0, RB:0, WR:0, TE:0 };
-  players.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
+  picks.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
 
   // How many roster spots left (total target is 36: ~10 starters + 14 bench + 10 PS + 2 buffer)
-  const totalDrafted  = players.length;
+  const totalDrafted  = picks.length;
   const slotsLeft     = Math.max(1, 36 - totalDrafted);
   const avgBid        = remaining / slotsLeft;
 
-  const context = { have, remaining, totalSpent: spent, avgBid };
+  const context = { have, remaining, totalSpent: spent, avgBid, picks };
 
   // Available players sorted by priority score
   const avail = auctionValues
@@ -1310,13 +1328,13 @@ function computeTargets() {
     const havePos = have[pos] || 0;
     if (havePos >= STARTER_MIN[pos]) return;
     const best = priorityPool.find(r => r.position === pos && !used.has(r.player_name));
-    if (best) { used.add(best.player_name); priorityCards.push({ ...best, bucket:'need', why: buildWhy(best, have, remaining, avgBid) }); }
+    if (best) { used.add(best.player_name); priorityCards.push({ ...best, bucket:'need', why: buildWhy(best, have, remaining, avgBid, picks) }); }
   });
 
   // Second pass: fill to 8 with best remaining scores
   avail.filter(r => !used.has(r.player_name)).slice(0, 8 - priorityCards.length).forEach(r => {
     used.add(r.player_name);
-    priorityCards.push({ ...r, bucket:'need', why: buildWhy(r, have, remaining, avgBid) });
+    priorityCards.push({ ...r, bucket:'need', why: buildWhy(r, have, remaining, avgBid, picks) });
   });
 
   // ── Bucket 2: Value Targets ──────────────────────────────────────────────
@@ -1329,7 +1347,7 @@ function computeTargets() {
       return a.rank - b.rank;
     })
     .slice(0, 6)
-    .map(r => { used.add(r.player_name); return { ...r, bucket:'value', why: buildWhy(r, have, remaining, avgBid) }; });
+    .map(r => { used.add(r.player_name); return { ...r, bucket:'value', why: buildWhy(r, have, remaining, avgBid, picks) }; });
 
   // ── Bucket 3: Late Stash / PS ────────────────────────────────────────────
   // $1-8 players, PS-eligible or just cheap high-upside youth
@@ -1343,13 +1361,13 @@ function computeTargets() {
       return a.rank - b.rank;
     })
     .slice(0, 8)
-    .map(r => ({ ...r, bucket:'stash', why: buildWhy(r, have, remaining, avgBid) }));
+    .map(r => ({ ...r, bucket:'stash', why: buildWhy(r, have, remaining, avgBid, picks) }));
 
-  return { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards };
+  return { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards, totalDrafted };
 }
 
 // ── Why string — dynasty-expert rationale per player ────────────────────────
-function buildWhy(r, have, remaining, avgBid) {
+function buildWhy(r, have, remaining, avgBid, picks) {
   const pos = r.position;
   const age = r.age || 26;
   const ag  = ageGrade(age);
@@ -1364,7 +1382,7 @@ function buildWhy(r, have, remaining, avgBid) {
   }
 
   // Superflex-specific QB note
-  if (pos === 'QB' && havePos === 1 && hasEliteQB()) {
+  if (pos === 'QB' && havePos === 1 && hasEliteQB(picks)) {
     parts.push('QB2 in SF is a starter every week');
   }
 
@@ -1403,9 +1421,58 @@ function buildWhy(r, have, remaining, avgBid) {
   return parts.slice(0, 2).join(' · ');
 }
 
-function renderTargets() {
-  const result = computeTargets();
+// Fetch the live draft_picks table straight from BigQuery (via Cloud Run default GET).
+// Returns a fresh picks array shaped for the targeting engine — never trusts the
+// in-memory `players` global, so the board is always current.
+async function fetchDraftPicks() {
+  const resp = await fetch(BQ_URL, { method: 'GET' });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  return (data.picks || []).map(r => ({
+    name: r.player_name,
+    pos:  r.position,
+    age:  parseInt(r.age) || 25,
+    sal:  parseFloat(r.salary),
+    yrs:  parseInt(r.contract_yrs),
+  }));
+}
 
+function setTgtStatus(text, cls) {
+  const el = document.getElementById('tgt-refresh-status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'tgt-refresh-status' + (cls ? ' ' + cls : '');
+}
+
+async function renderTargets() {
+  const btn = document.getElementById('tgt-refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  setTgtStatus('● Reading live draft board…', 'loading');
+
+  let livePicks;
+  try {
+    livePicks = await fetchDraftPicks();
+    // keep the global in sync so other tabs reflect the same board
+    players = livePicks.map(p => ({ ...p, pick_id: undefined }));
+  } catch (err) {
+    console.error('Targets fetch failed:', err);
+    setTgtStatus('✕ Could not reach draft board — showing last known', 'error');
+    if (btn) btn.classList.remove('spinning');
+    // fall back to whatever is in memory
+    livePicks = players.map(p => ({ name:p.name, pos:p.pos, age:p.age, sal:p.sal, yrs:p.yrs }));
+  }
+
+  const result = computeTargets(livePicks);
+  paintTargets(result, livePicks);
+
+  if (btn) btn.classList.remove('spinning');
+  if (result) {
+    const ts = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    setTgtStatus(`✓ Live — ${result.totalDrafted} picks on board · updated ${ts}`, 'live');
+  }
+}
+
+function paintTargets(result, livePicks) {
   if (!result) {
     document.getElementById('tgt-empty').style.display = 'flex';
     document.getElementById('tgt-roster-block').innerHTML = '';
@@ -1415,13 +1482,13 @@ function renderTargets() {
   }
   document.getElementById('tgt-empty').style.display = 'none';
 
-  const { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards } = result;
+  const { have, remaining, spent, avgBid, priorityCards, valueCards, stashCards, totalDrafted } = result;
   const pc = { QB:'pQB', WR:'pWR', RB:'pRB', TE:'pTE' };
 
   // ── Roster snapshot ───────────────────────────────────────────────────────
   const posColors = { QB:'#3B82F6', RB:'#F5A623', WR:'#00C97A', TE:'#E879B0' };
   const posLabels = { QB:'QBs', RB:'RBs', WR:'WRs', TE:'TEs' };
-  const slotsLeft = Math.max(1, 36 - players.length);
+  const slotsLeft = Math.max(1, 36 - totalDrafted);
   const avgDisplay = remaining > 0 ? '$' + Math.round(avgBid) : '—';
 
   document.getElementById('tgt-roster-block').innerHTML =
