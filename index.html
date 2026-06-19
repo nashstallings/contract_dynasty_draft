@@ -92,6 +92,25 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 /* ── Draft Tracker ── */
 .budget-block{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;}
+.cap-breakdown{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 24px;margin-bottom:24px;}
+.cb-section{display:grid;grid-template-columns:130px repeat(4,1fr);gap:8px 12px;align-items:center;}
+.cb-section+.cb-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+.cb-title{font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text);}
+.cb-col-head{font-family:var(--font-mono);font-size:12px;font-weight:500;text-align:right;color:var(--text2);}
+.cb-row-label{font-family:var(--font-body);font-size:12px;color:var(--text2);}
+.cb-val{font-family:var(--font-mono);font-size:14px;font-weight:500;text-align:right;}
+.cb-val.pos{color:var(--green);}
+.cb-val.tight{color:var(--amber);}
+.cb-val.neg{color:var(--red);}
+.cb-val.muted{color:var(--text3);}
+@media(max-width:640px){
+  .cap-breakdown{padding:14px;}
+  .cb-section{grid-template-columns:74px repeat(4,1fr);gap:6px 6px;}
+  .cb-title{font-size:13px;}
+  .cb-col-head{font-size:11px;}
+  .cb-val{font-size:12px;}
+  .cb-row-label{font-size:11px;}
+}
 .budget-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
 .bmet{border-right:1px solid var(--border);}
 .bmet:last-child{border-right:none;}
@@ -503,6 +522,9 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="pos-pills" id="pos-pills"></div>
     </div>
 
+    <!-- Cap & contract breakdown for the viewed team -->
+    <div class="cap-breakdown" id="cap-breakdown"></div>
+
     <div class="player-list-card" id="plist-wrap">
       <div class="player-list-header">
         <span>Player</span><span style="text-align:center;">Pos</span>
@@ -655,6 +677,12 @@ const TEAMS=['NashStallings','JustinStricklan','JordanSchultz','Taterade','noelf
 const MY_TEAM='NashStallings';
 let viewedTeam=MY_TEAM;        // which team's roster the tracker is currently showing
 let draftOwner=MY_TEAM;        // which team the add-player form will assign the pick to
+
+// ── Cap projection rules ──────────────────────────────────────────────────────
+const SEASON_CAP=300;          // held flat across all projected years
+const ESCALATION=0.15;         // 15% annual salary escalation
+const SEASONS=[2026,2027,2028,2029];
+const CONTRACT_LIMITS={2:4,3:3,4:2};  // max contracts allowed per length (1yr unlimited)
 
 // Auction values state
 let auctionValues=[];    // raw array from BQ
@@ -1055,6 +1083,56 @@ function updBudget(){
     `<span class="pos-pill" style="background:${bcol[pos]||'var(--card2)'};color:${tcol[pos]||'var(--text2)'};border-color:${tcol[pos]||'var(--border)'}33;">${pos}: ${n}</span>`).join('');
   renderPlayers();
   renderLeagueSummary();
+  renderCapBreakdown();
+}
+
+// Multi-year cap space + contract availability for the viewed team
+function renderCapBreakdown(){
+  const el=document.getElementById('cap-breakdown');
+  if(!el) return;
+  const tp=viewedPicks();
+
+  // Per-year committed cap: each player's escalated, discounted salary for the
+  // seasons their contract covers. Year offset k: base × (1 + escalation)^k.
+  const committed=[0,0,0,0];
+  const lenCounts={1:0,2:0,3:0,4:0};
+  tp.forEach(p=>{
+    const d=DISC[p.yrs]||0;
+    const base=p.sal*(1-d);
+    lenCounts[p.yrs]=(lenCounts[p.yrs]||0)+1;
+    for(let k=0;k<p.yrs && k<SEASONS.length;k++){
+      committed[k]+=base*Math.pow(1+ESCALATION,k);
+    }
+  });
+  const available=committed.map(c=>SEASON_CAP-c);
+
+  // Contract slots remaining per length
+  const contractsAvail={
+    2:CONTRACT_LIMITS[2]-(lenCounts[2]||0),
+    3:CONTRACT_LIMITS[3]-(lenCounts[3]||0),
+    4:CONTRACT_LIMITS[4]-(lenCounts[4]||0),
+  };
+
+  const capClass=v=>v<0?'neg':v<=SEASON_CAP*0.15?'tight':'pos';
+  const ctClass =v=>v<0?'neg':v===0?'tight':'pos';
+
+  el.innerHTML=`
+    <div class="cb-section">
+      <div class="cb-title">Cap Space</div>
+      ${SEASONS.map(y=>`<div class="cb-col-head">'${String(y).slice(2)}</div>`).join('')}
+      <div class="cb-row-label">Available</div>
+      ${available.map(v=>`<div class="cb-val ${capClass(v)}">$${Math.round(v)}</div>`).join('')}
+    </div>
+    <div class="cb-section">
+      <div class="cb-title">Contracts</div>
+      <div class="cb-col-head">1y</div><div class="cb-col-head">2y</div>
+      <div class="cb-col-head">3y</div><div class="cb-col-head">4y</div>
+      <div class="cb-row-label">Available</div>
+      <div class="cb-val muted">–</div>
+      <div class="cb-val ${ctClass(contractsAvail[2])}">${contractsAvail[2]}</div>
+      <div class="cb-val ${ctClass(contractsAvail[3])}">${contractsAvail[3]}</div>
+      <div class="cb-val ${ctClass(contractsAvail[4])}">${contractsAvail[4]}</div>
+    </div>`;
 }
 
 // Compact league-wide spend summary shown in the team selector bar
