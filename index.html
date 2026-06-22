@@ -430,14 +430,14 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn on" onclick="sw('plan',this)">Budget Plan</button>
-  <button class="tab-btn" onclick="sw('board',this)">Board</button>
+  <button class="tab-btn on" onclick="sw('board',this)">Board</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
+  <button class="tab-btn" onclick="sw('plan',this)">Budget Plan</button>
 </div>
 <div class="tab-divider"></div>
 
 <!-- ========== PLAN PANEL ========== -->
-<div class="panel on" id="p-plan">
+<div class="panel" id="p-plan">
   <div class="callout"><strong>Startup rule #1:</strong> Let the first 3–5 players sell before you spend big. Early frenzy inflates prices 30–40%. With a $250 budget you have room — be patient.</div>
   <div class="section-label">League cap rules</div>
   <div class="rules-grid">
@@ -475,7 +475,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 <!-- ========== DRAFT TRACKER PANEL ========== -->
 <!-- ========== BOARD PANEL (Tracker + Smart Targets + Full List) ========== -->
-<div class="panel" id="p-board">
+<div class="panel on" id="p-board">
 
   <!-- Sub-view toggle + live refresh -->
   <div class="board-head">
