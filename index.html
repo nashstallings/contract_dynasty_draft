@@ -366,13 +366,12 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('board',this)">Board</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
-  <button class="tab-btn" onclick="sw('plan',this)">Budget Plan</button>
+  <button class="tab-btn" onclick="sw('plan',this)">League Rules</button>
 </div>
 <div class="tab-divider"></div>
 
 <!-- ========== PLAN PANEL ========== -->
 <div class="panel" id="p-plan">
-  <div class="callout"><strong>Startup rule #1:</strong> Let the first 3–5 players sell before you spend big. Early frenzy inflates prices 30–40%. With a $250 budget you have room — be patient.</div>
   <div class="section-label">League cap rules</div>
   <div class="rules-grid">
     <div class="rule-card"><div class="rule-label">Season cap</div><div class="rule-value">$300</div><div class="rule-detail">Increases proportionally with the NFL salary cap each offseason, rounded to the nearest full percent.</div></div>
@@ -383,7 +382,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     <div class="rule-card"><div class="rule-label">Dead money</div><div class="rule-value" style="color:var(--red);">Tiered</div><div class="rule-detail">100% salary dead cap this season + graduated next-year penalty based on years remaining. See table below.</div></div>
   </div>
   <div class="section-label">Dead money scale</div>
-  <div class="callout-amber"><strong>Know this before you bid.</strong> Cutting a player costs 100% of their salary as dead cap immediately. Next season's additional penalty scales with how many years remain on the deal when you cut.</div>
   <table class="dm-table">
     <thead><tr><th>Years remaining at time of cut</th><th>Next-season penalty</th><th>Example: $20/yr salary</th><th>Risk level</th></tr></thead>
     <tbody>
