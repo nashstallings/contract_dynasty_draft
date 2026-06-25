@@ -1,0 +1,5 @@
+nflreadpy
+pandas-gbq
+sleeper-api-wrapper
+pandas
+google-auth
