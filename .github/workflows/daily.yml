@@ -25,3 +25,5 @@ jobs:
 
       - name: Run Python script
         run: python nfl_data_refresh.py
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
