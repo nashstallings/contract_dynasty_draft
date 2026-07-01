@@ -418,6 +418,23 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   <!-- ── Sub-view: Tracker ── -->
   <div id="board-tracker">
 
+    <!-- On the Block: live nomination check — is this player worth bidding on right now? -->
+    <div class="add-form-card" id="nom-card">
+      <div class="form-title">On The Block</div>
+      <div class="form-row-new" style="grid-template-columns:1fr 130px 90px;">
+        <div class="fg">
+          <label>Nominated player</label>
+          <div class="player-search-wrap">
+            <input type="text" id="nom-pn" placeholder="Who's up for auction…" autocomplete="off" oninput="onNomSearch(this.value)" onkeydown="onNomKey(event)"/>
+            <div class="typeahead-dropdown" id="nom-td"></div>
+          </div>
+        </div>
+        <div class="fg"><label>Current bid ($)</label><input type="number" id="nom-bid" min="0" placeholder="0" oninput="renderNomRec()"/></div>
+        <div class="fg"><label>&nbsp;</label><button class="add-btn" style="background:var(--card2);color:var(--text2);" onclick="clearNom()">Clear</button></div>
+      </div>
+      <div id="nom-rec" style="margin-top:14px;"></div>
+    </div>
+
     <!-- Add player form (logs the winning bid + which team won it) -->
     <div class="add-form-card">
       <div class="form-title">Log a won player</div>
@@ -852,6 +869,136 @@ document.addEventListener('click',e=>{
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3b. On The Block — live nomination check (target vs. pass while bidding is live)
+// ─────────────────────────────────────────────────────────────────────────────
+let nomPlayer=null;
+let nomActiveIdx=-1;
+
+function onNomSearch(val){
+  nomPlayer=null;
+  const q=val.trim().toLowerCase();
+  const td=document.getElementById('nom-td');
+  if(!q){td.classList.remove('open');renderNomRec();return;}
+  const already=new Set(players.map(p=>p.name.toLowerCase()));
+  const matches=rosterList
+    .filter(p=>p.display_name.toLowerCase().includes(q)&&!already.has(p.display_name.toLowerCase()))
+    .slice(0,40);
+  if(!matches.length){
+    td.innerHTML='<div class="td-empty">No players found</div>';
+    td.classList.add('open');nomActiveIdx=-1;renderNomRec();return;
+  }
+  nomActiveIdx=-1;
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  td.innerHTML=matches.map((p,i)=>{
+    const av=avMap.get(p.display_name.toLowerCase());
+    const valHtml=av
+      ?`<span class="td-item-val">$${av.auction_value}</span>`
+      :`<span class="td-item-val" style="color:var(--text3);">—</span>`;
+    return `<div class="td-item" data-idx="${i}" onmousedown="selectNomPlayer(${i})" onmouseover="setNomActive(${i})">
+      <span class="ptag ${pc[p.position]||''}" style="flex-shrink:0;">${p.position}</span>
+      <span class="td-item-name">${p.display_name}</span>
+      <span class="td-item-team">${p.latest_team||''}</span>
+      <span class="td-item-age">${p.age!=null?p.age+'y':'—'}</span>
+      ${valHtml}
+    </div>`;
+  }).join('');
+  td._matches=matches;
+  td.classList.add('open');
+}
+
+function setNomActive(i){
+  nomActiveIdx=i;
+  document.querySelectorAll('#nom-td .td-item').forEach((el,j)=>el.classList.toggle('active',j===i));
+}
+
+function selectNomPlayer(i){
+  const td=document.getElementById('nom-td');
+  const p=(td._matches||[])[i];
+  if(!p)return;
+  nomPlayer=p;
+  document.getElementById('nom-pn').value=p.display_name;
+  td.classList.remove('open');
+  document.getElementById('nom-bid').focus();
+  renderNomRec();
+}
+
+function onNomKey(e){
+  const td=document.getElementById('nom-td');
+  if(!td.classList.contains('open'))return;
+  const items=td.querySelectorAll('.td-item');if(!items.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();nomActiveIdx=Math.min(nomActiveIdx+1,items.length-1);setNomActive(nomActiveIdx);items[nomActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='ArrowUp'){e.preventDefault();nomActiveIdx=Math.max(nomActiveIdx-1,0);setNomActive(nomActiveIdx);items[nomActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='Enter'){e.preventDefault();if(nomActiveIdx>=0)selectNomPlayer(nomActiveIdx);}
+  else if(e.key==='Escape'){td.classList.remove('open');}
+}
+
+function clearNom(){
+  nomPlayer=null;
+  document.getElementById('nom-pn').value='';
+  document.getElementById('nom-bid').value='';
+  document.getElementById('nom-td').classList.remove('open');
+  renderNomRec();
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#nom-card .player-search-wrap')){
+    document.getElementById('nom-td').classList.remove('open');
+  }
+});
+
+function renderNomRec(){
+  const el=document.getElementById('nom-rec');
+  if(!el) return;
+  if(!nomPlayer){ el.innerHTML=''; return; }
+
+  const bid=parseFloat(document.getElementById('nom-bid').value)||0;
+  const pos=nomPlayer.position;
+  const av=avMap.get(nomPlayer.display_name.toLowerCase());
+  const myPicks=players.filter(p=>(p.owner||MY_TEAM)===MY_TEAM);
+  const spent=myPicks.reduce((s,p)=>s+p.sal,0);
+  const remaining=250-spent;
+  const plan=SPEND_PLAN[pos];
+  const { groups }=computeSpendVsPlan(myPicks);
+  const grp=groups[pos]||{spent:0,count:0};
+  const planBudget=plan?plan.budget:0;
+  const posRemaining=plan?planBudget-grp.spent:null;
+
+  if(!av){
+    el.innerHTML=`<div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);padding:10px 0;">No target value found for ${nomPlayer.display_name} — not on the auction values board.</div>`;
+    return;
+  }
+
+  let verdict,color;
+  if(bid<=0){ verdict='Enter the current bid'; color='var(--text3)'; }
+  else if(bid>remaining){ verdict="CAN'T AFFORD"; color='var(--red)'; }
+  else{
+    const diffPct=(bid-av.auction_value)/av.auction_value;
+    if(diffPct<=0){ verdict='TARGET — at or under value'; color='var(--green)'; }
+    else if(diffPct<=0.15){ verdict='CAUTION — near market'; color='var(--amber)'; }
+    else{ verdict='PASS — overpay'; color='var(--red)'; }
+  }
+
+  const posOver=posRemaining!=null && posRemaining<0;
+  const posLine=plan
+    ?` · ${pos} plan: $${grp.spent}/$${planBudget} spent, ${posOver?'$'+Math.abs(posRemaining)+' over':'$'+posRemaining+' left'}`
+    :'';
+
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;flex-wrap:wrap;">
+      <div>
+        <div style="font-family:var(--font-head);font-size:18px;font-weight:800;color:${color};">${verdict}</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);margin-top:4px;">
+          Target $${av.auction_value} · ${av.tier} #${av.rank}${posLine}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">Your remaining budget</div>
+        <div style="font-family:var(--font-head);font-size:20px;font-weight:800;color:var(--text);">$${remaining}</div>
+      </div>
+    </div>`;
+}
+
 async function writeToBQ(player){
   const discount=DISC[player.yrs]||0;
   const cap=player.sal*(1-discount);
@@ -977,6 +1124,7 @@ function updBudget(){
   renderLeagueSummary();
   renderCapBreakdown();
   renderSpendPlan();
+  renderNomRec();
 }
 
 // Multi-year cap space + contract availability for the viewed team
