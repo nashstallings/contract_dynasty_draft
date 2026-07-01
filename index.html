@@ -742,11 +742,15 @@ async function loadFromBQ(){
       pick_id:r.pick_id,owner:r.owner||'NashStallings',name:r.player_name,pos:r.position,
       age:parseInt(r.age)||25,sal:parseFloat(r.salary),yrs:parseInt(r.contract_yrs),
     }));
-    // Drop any restored nomination for a player someone else already won elsewhere
+    // Drop any nomination for a player someone else already won (cleans up the
+    // shared board if a "win" happened on another device between polls)
     const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
-    const before=nominations.length;
-    nominations=nominations.filter(n=>!draftedNames.has(n.player.display_name.toLowerCase()));
-    if(nominations.length!==before){ renderNominations(); saveNominations(); }
+    const stale=nominations.filter(n=>draftedNames.has(n.player.display_name.toLowerCase()));
+    if(stale.length){
+      nominations=nominations.filter(n=>!draftedNames.has(n.player.display_name.toLowerCase()));
+      renderNominations();
+      stale.forEach(n=>deleteNominationRemote(n.id));
+    }
     updBudget();showBQStatus('loaded');
   }catch(err){console.error('BQ load failed:',err);showBQStatus('error');}
 }
@@ -765,23 +769,130 @@ async function loadRoster(){
 // Winning a nomination is the ONLY way a player gets logged to the drafted list.
 // ─────────────────────────────────────────────────────────────────────────────
 const MAX_NOMINATIONS=20;
-const NOM_STORAGE_KEY='dynastyTycoonNominations';
+const NOM_POLL_MS=5000;
 let selectedNomAddPlayer=null;
 let nomAddActiveIdx=-1;
+const nomPushTimers={};
 
-// Persist nominations to localStorage so the board survives a page refresh
-// (single-browser only — this does not sync across teammates' devices).
-function saveNominations(){
-  try{ localStorage.setItem(NOM_STORAGE_KEY, JSON.stringify(nominations)); }
-  catch(err){ console.error('Failed to save nominations:',err); }
+// Nominations live in BigQuery (via the same Cloud Run proxy as picks) so the
+// board is shared across every device pointed at this app, not just one browser.
+function remoteRowToNomination(row){
+  return {
+    id:row.nomination_id,
+    player:{
+      display_name:row.player_name,
+      position:row.position,
+      age:row.age,
+      latest_team:row.latest_team,
+      gsis_id:row.gsis_id,
+    },
+    bid:row.bid!=null?String(row.bid):'',
+    owner:row.owner||MY_TEAM,
+    yrs:parseInt(row.contract_yrs)||1,
+  };
 }
 
-function loadNominations(){
+async function loadNominations(){
   try{
-    const raw=localStorage.getItem(NOM_STORAGE_KEY);
-    if(raw) nominations=JSON.parse(raw)||[];
-  }catch(err){ console.error('Failed to load saved nominations:',err); nominations=[]; }
+    const resp=await fetch(BQ_URL+'?nominations=1');
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    nominations=(data.nominations||[]).map(remoteRowToNomination);
+  }catch(err){
+    console.error('Nominations load failed:',err);
+    nominations=[];
+  }
   renderNominations();
+  if(!nomPollTimer) nomPollTimer=setInterval(pollNominations,NOM_POLL_MS);
+}
+
+let nomPollTimer=null;
+
+async function pollNominations(){
+  try{
+    const resp=await fetch(BQ_URL+'?nominations=1');
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    mergeRemoteNominations(data.nominations||[]);
+  }catch(err){ console.error('Nominations poll failed:',err); }
+}
+
+// Merge server state into the local nominations list. Rows added/removed trigger
+// a full re-render (rare); in-place field updates patch the DOM directly instead
+// of rebuilding rows, so a teammate's edit elsewhere doesn't steal your focus
+// mid-keystroke — and a bid you're actively typing is never overwritten.
+function mergeRemoteNominations(rows){
+  const serverIds=new Set(rows.map(r=>r.nomination_id));
+  const before=nominations.length;
+  nominations=nominations.filter(n=>serverIds.has(n.id));
+  let structural=nominations.length!==before;
+
+  const toAdd=[];
+  rows.forEach(row=>{
+    const existing=nominations.find(n=>n.id===row.nomination_id);
+    if(!existing){ toAdd.push(remoteRowToNomination(row)); return; }
+
+    const bidEl=document.getElementById('nom-bid-'+existing.id);
+    const bidFocused=document.activeElement===bidEl;
+    const remoteBid=row.bid!=null?String(row.bid):'';
+    if(!bidFocused && existing.bid!==remoteBid){
+      existing.bid=remoteBid;
+      if(bidEl) bidEl.value=remoteBid;
+      updateNomRowVerdict(existing.id);
+    }
+
+    const remoteOwner=row.owner||MY_TEAM;
+    if(existing.owner!==remoteOwner){
+      existing.owner=remoteOwner;
+      const selects=document.querySelectorAll(`#nom-row-${existing.id} select`);
+      if(selects[0]) selects[0].value=remoteOwner;
+      updateNomRowVerdict(existing.id);
+    }
+
+    const remoteYrs=parseInt(row.contract_yrs)||1;
+    if(existing.yrs!==remoteYrs){
+      existing.yrs=remoteYrs;
+      const selects=document.querySelectorAll(`#nom-row-${existing.id} select`);
+      if(selects[1]) selects[1].value=String(remoteYrs);
+    }
+  });
+
+  if(toAdd.length){ nominations.push(...toAdd); structural=true; }
+  if(structural) renderNominations();
+}
+
+async function pushNomination(nom){
+  const p=nom.player;
+  const row={
+    nomination_id:nom.id,
+    player_name:p.display_name,
+    position:p.position,
+    age:p.age,
+    latest_team:p.latest_team,
+    gsis_id:p.gsis_id,
+    bid:parseFloat(nom.bid)||0,
+    owner:nom.owner||MY_TEAM,
+    contract_yrs:nom.yrs||1,
+  };
+  try{
+    const resp=await fetch(BQ_URL+'?nomination=1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)});
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+  }catch(err){ console.error('Nomination push failed:',err); }
+}
+
+function schedulePushNomination(id){
+  clearTimeout(nomPushTimers[id]);
+  nomPushTimers[id]=setTimeout(()=>{
+    const nom=nominations.find(n=>n.id===id);
+    if(nom) pushNomination(nom);
+  },400);
+}
+
+async function deleteNominationRemote(id){
+  try{
+    const resp=await fetch(BQ_URL+'?nomination_id='+encodeURIComponent(id),{method:'DELETE'});
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+  }catch(err){ console.error('Nomination delete failed:',err); }
 }
 
 function alreadyOnBlockOrDrafted(name){
@@ -855,17 +966,18 @@ function addNomination(){
   if(nominations.length>=MAX_NOMINATIONS){alert(`Max ${MAX_NOMINATIONS} concurrent nominations.`);return;}
   const p=selectedNomAddPlayer;
   if(alreadyOnBlockOrDrafted(p.display_name)) return;
-  nominations.push({id:crypto.randomUUID(),player:p,bid:'',owner:MY_TEAM,yrs:1});
+  const nom={id:crypto.randomUUID(),player:p,bid:'',owner:MY_TEAM,yrs:1};
+  nominations.push(nom);
   document.getElementById('nom-add-pn').value='';
   selectedNomAddPlayer=null;
   renderNominations();
-  saveNominations();
+  pushNomination(nom);
 }
 
 function removeNomination(id){
   nominations=nominations.filter(n=>n.id!==id);
   renderNominations();
-  saveNominations();
+  deleteNominationRemote(id);
 }
 
 function onNomBidInput(id,val){
@@ -873,7 +985,7 @@ function onNomBidInput(id,val){
   if(!nom)return;
   nom.bid=val;
   updateNomRowVerdict(id);
-  saveNominations();
+  schedulePushNomination(id);
 }
 
 function onNomOwnerChange(id,val){
@@ -881,14 +993,14 @@ function onNomOwnerChange(id,val){
   if(!nom)return;
   nom.owner=val;
   updateNomRowVerdict(id);
-  saveNominations();
+  pushNomination(nom);
 }
 
 function onNomYrsChange(id,val){
   const nom=nominations.find(n=>n.id===id);
   if(!nom)return;
   nom.yrs=parseInt(val)||1;
-  saveNominations();
+  pushNomination(nom);
 }
 
 // Confirm the nomination as won — this is the only path a pick is logged.
@@ -902,7 +1014,7 @@ async function winNomination(id){
   const p=nom.player;
   if(players.some(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase())){
     alert(`${p.display_name} is already drafted.`);
-    nominations=nominations.filter(n=>n.id!==id);renderNominations();return;
+    nominations=nominations.filter(n=>n.id!==id);renderNominations();deleteNominationRemote(id);return;
   }
   const ownerSpent=players.filter(pl=>(pl.owner||MY_TEAM)===owner).reduce((s,pl)=>s+pl.sal,0);
   if(ownerSpent+bid>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
@@ -911,7 +1023,7 @@ async function winNomination(id){
   players.push(player);
   writeToBQ(player);
   nominations=nominations.filter(n=>n.id!==id);
-  saveNominations();
+  deleteNominationRemote(id);
   // Jump the view to the team that just won the player so you see it land
   viewedTeam=owner;
   const teamSel=document.getElementById('team-selector');
@@ -987,7 +1099,7 @@ function buildNomRowHtml(nom){
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;min-width:200px;">
       <div style="display:flex;gap:6px;">
-        <div class="fg" style="flex:0 0 76px;"><input type="number" min="0" placeholder="Bid $" value="${nom.bid}" oninput="onNomBidInput('${nom.id}',this.value)"/></div>
+        <div class="fg" style="flex:0 0 76px;"><input id="nom-bid-${nom.id}" type="number" min="0" placeholder="Bid $" value="${nom.bid}" oninput="onNomBidInput('${nom.id}',this.value)"/></div>
         <div class="fg" style="flex:1;"><select onchange="onNomOwnerChange('${nom.id}',this.value)">
           ${TEAMS.map(t=>`<option value="${t}"${t===nom.owner?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('')}
         </select></div>
