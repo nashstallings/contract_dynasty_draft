@@ -654,6 +654,7 @@ async function loadAuctionValues(){
     avMap=new Map(auctionValues.map(r=>[r.player_name.toLowerCase(),r]));
     if(el) el.textContent='';
     renderAV();
+    renderNominations(); // target values now available for any nominations restored from storage
   }catch(err){
     console.error('Auction values load failed:',err);
     if(el) el.textContent='✕ Could not load auction values — check Cloud Run ?auction_values route';
@@ -741,6 +742,11 @@ async function loadFromBQ(){
       pick_id:r.pick_id,owner:r.owner||'NashStallings',name:r.player_name,pos:r.position,
       age:parseInt(r.age)||25,sal:parseFloat(r.salary),yrs:parseInt(r.contract_yrs),
     }));
+    // Drop any restored nomination for a player someone else already won elsewhere
+    const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
+    const before=nominations.length;
+    nominations=nominations.filter(n=>!draftedNames.has(n.player.display_name.toLowerCase()));
+    if(nominations.length!==before){ renderNominations(); saveNominations(); }
     updBudget();showBQStatus('loaded');
   }catch(err){console.error('BQ load failed:',err);showBQStatus('error');}
 }
@@ -759,8 +765,24 @@ async function loadRoster(){
 // Winning a nomination is the ONLY way a player gets logged to the drafted list.
 // ─────────────────────────────────────────────────────────────────────────────
 const MAX_NOMINATIONS=20;
+const NOM_STORAGE_KEY='dynastyTycoonNominations';
 let selectedNomAddPlayer=null;
 let nomAddActiveIdx=-1;
+
+// Persist nominations to localStorage so the board survives a page refresh
+// (single-browser only — this does not sync across teammates' devices).
+function saveNominations(){
+  try{ localStorage.setItem(NOM_STORAGE_KEY, JSON.stringify(nominations)); }
+  catch(err){ console.error('Failed to save nominations:',err); }
+}
+
+function loadNominations(){
+  try{
+    const raw=localStorage.getItem(NOM_STORAGE_KEY);
+    if(raw) nominations=JSON.parse(raw)||[];
+  }catch(err){ console.error('Failed to load saved nominations:',err); nominations=[]; }
+  renderNominations();
+}
 
 function alreadyOnBlockOrDrafted(name){
   const lc=name.toLowerCase();
@@ -837,11 +859,13 @@ function addNomination(){
   document.getElementById('nom-add-pn').value='';
   selectedNomAddPlayer=null;
   renderNominations();
+  saveNominations();
 }
 
 function removeNomination(id){
   nominations=nominations.filter(n=>n.id!==id);
   renderNominations();
+  saveNominations();
 }
 
 function onNomBidInput(id,val){
@@ -849,6 +873,7 @@ function onNomBidInput(id,val){
   if(!nom)return;
   nom.bid=val;
   updateNomRowVerdict(id);
+  saveNominations();
 }
 
 function onNomOwnerChange(id,val){
@@ -856,12 +881,14 @@ function onNomOwnerChange(id,val){
   if(!nom)return;
   nom.owner=val;
   updateNomRowVerdict(id);
+  saveNominations();
 }
 
 function onNomYrsChange(id,val){
   const nom=nominations.find(n=>n.id===id);
   if(!nom)return;
   nom.yrs=parseInt(val)||1;
+  saveNominations();
 }
 
 // Confirm the nomination as won — this is the only path a pick is logged.
@@ -884,6 +911,7 @@ async function winNomination(id){
   players.push(player);
   writeToBQ(player);
   nominations=nominations.filter(n=>n.id!==id);
+  saveNominations();
   // Jump the view to the team that just won the player so you see it land
   viewedTeam=owner;
   const teamSel=document.getElementById('team-selector');
@@ -1819,6 +1847,7 @@ function paintTargets(result, livePicks) {
 
 
 buildTeamDropdowns();updBudget();
+loadNominations();
 loadFromBQ();loadRoster();loadAuctionValues();
 </script>
 </body>
