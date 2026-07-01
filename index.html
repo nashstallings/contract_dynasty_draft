@@ -176,7 +176,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .team-selector-spacer{flex:1;}
 .team-league-summary{font-family:var(--font-mono);font-size:11px;color:var(--text3);text-align:right;}
 .form-row-new .fg{display:flex;flex-direction:column;justify-content:flex-end;}
-.form-autofill-row{display:flex;gap:8px;margin-top:8px;min-height:22px;align-items:center;}
 
 /* ── Auction Values tab ── */
 .av-filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
@@ -418,52 +417,25 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   <!-- ── Sub-view: Tracker ── -->
   <div id="board-tracker">
 
-    <!-- On the Block: live nomination check — is this player worth bidding on right now? -->
+    <!-- Nominations Board: everyone currently on the block in a slow draft (up to 20 at once).
+         This is the ONLY path a player enters the drafted list — winning a nomination here
+         logs the pick directly, no separate "log a pick" form. -->
     <div class="add-form-card" id="nom-card">
-      <div class="form-title">On The Block</div>
-      <div class="form-row-new" style="grid-template-columns:1fr 130px 90px;">
+      <div class="form-title">Nominations Board <span style="font-family:var(--font-mono);font-size:11px;font-weight:400;letter-spacing:.5px;color:var(--text3);margin-left:8px;text-transform:none;" id="nom-count">0 / 20 on the block</span></div>
+      <div class="form-row-new" style="grid-template-columns:1fr auto;">
         <div class="fg">
-          <label>Nominated player</label>
+          <label>Nominate a player</label>
           <div class="player-search-wrap">
-            <input type="text" id="nom-pn" placeholder="Who's up for auction…" autocomplete="off" oninput="onNomSearch(this.value)" onkeydown="onNomKey(event)"/>
-            <div class="typeahead-dropdown" id="nom-td"></div>
+            <input type="text" id="nom-add-pn" placeholder="Search by name…" autocomplete="off" oninput="onNomAddSearch(this.value)" onkeydown="onNomAddKey(event)"/>
+            <div class="typeahead-dropdown" id="nom-add-td"></div>
           </div>
         </div>
-        <div class="fg"><label>Current bid ($)</label><input type="number" id="nom-bid" min="0" placeholder="0" oninput="renderNomRec()"/></div>
-        <div class="fg"><label>&nbsp;</label><button class="add-btn" style="background:var(--card2);color:var(--text2);" onclick="clearNom()">Clear</button></div>
-      </div>
-      <div id="nom-rec" style="margin-top:14px;"></div>
-    </div>
-
-    <!-- Add player form (logs the winning bid + which team won it) -->
-    <div class="add-form-card">
-      <div class="form-title">Log a won player</div>
-      <div class="form-row-new">
-        <div class="fg">
-          <label>Player name</label>
-          <div class="player-search-wrap">
-            <input type="text" id="pn" placeholder="Search by name…" autocomplete="off" oninput="onPlayerSearch(this.value)" onkeydown="onSearchKey(event)"/>
-            <div class="typeahead-dropdown" id="td"></div>
-          </div>
-        </div>
-        <div class="fg"><label>Salary ($)</label><input type="number" id="ps" min="1" max="250" placeholder="20"/></div>
-        <div class="fg"><label>Contract</label>
-          <select id="py"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
-        </div>
-        <div class="fg"><label>Won by</label>
-          <select id="powner" onchange="draftOwner=this.value"></select>
-        </div>
-        <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addP()">+ Add</button></div>
-      </div>
-      <div class="form-autofill-row" id="autofill-row">
-        <span class="autofill-badge empty" id="af-pos">Pos —</span>
-        <span class="autofill-badge empty" id="af-age">Age —</span>
-        <span class="autofill-badge empty" id="af-team">Team —</span>
-        <span class="autofill-badge empty" id="af-av">Target —</span>
+        <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addNomination()">+ Nominate</button></div>
       </div>
       <div style="margin-top:10px;min-height:18px;">
         <span id="bq-status" style="font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;opacity:0;transition:opacity .3s;"></span>
       </div>
+      <div id="nom-list" style="margin-top:16px;display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
     <!-- Team selector: whose roster am I viewing -->
@@ -631,15 +603,13 @@ const DISC={1:0,2:.08,3:.16,4:.24};
 const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
 let players=[];
 let rosterList=[];
-let selectedPlayer=null;
-let tdActiveIdx=-1;
+let nominations=[];   // players currently on the block: {id, player, bid, owner, yrs}
 
 // ── League teams ──────────────────────────────────────────────────────────────
 const TEAMS=['NashStallings','JustinStricklan','JordanSchultz','Taterade','noelfoster',
   'DanielClinton','JoeFaustyn','RyanSmith5','IrradiAsian','GregDew','ColinGallagher','CamMonari'];
 const MY_TEAM='NashStallings';
 let viewedTeam=MY_TEAM;        // which team's roster the tracker is currently showing
-let draftOwner=MY_TEAM;        // which team the add-player form will assign the pick to
 
 // ── Cap projection rules ──────────────────────────────────────────────────────
 const SEASON_CAP=300;          // held flat across all projected years
@@ -785,29 +755,38 @@ async function loadRoster(){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Typeahead — now shows target value in each row
+// 4. Nominations Board — everyone currently on the block (slow draft, up to 20 at once).
+// Winning a nomination is the ONLY way a player gets logged to the drafted list.
 // ─────────────────────────────────────────────────────────────────────────────
-function onPlayerSearch(val){
-  selectedPlayer=null;setAutofill(null);
+const MAX_NOMINATIONS=20;
+let selectedNomAddPlayer=null;
+let nomAddActiveIdx=-1;
+
+function alreadyOnBlockOrDrafted(name){
+  const lc=name.toLowerCase();
+  return players.some(p=>p.name.toLowerCase()===lc) || nominations.some(n=>n.player.display_name.toLowerCase()===lc);
+}
+
+function onNomAddSearch(val){
+  selectedNomAddPlayer=null;
   const q=val.trim().toLowerCase();
-  const td=document.getElementById('td');
+  const td=document.getElementById('nom-add-td');
   if(!q){td.classList.remove('open');return;}
-  const already=new Set(players.map(p=>p.name.toLowerCase()));
   const matches=rosterList
-    .filter(p=>p.display_name.toLowerCase().includes(q)&&!already.has(p.display_name.toLowerCase()))
+    .filter(p=>p.display_name.toLowerCase().includes(q)&&!alreadyOnBlockOrDrafted(p.display_name))
     .slice(0,40);
   if(!matches.length){
     td.innerHTML='<div class="td-empty">No players found</div>';
-    td.classList.add('open');tdActiveIdx=-1;return;
+    td.classList.add('open');nomAddActiveIdx=-1;return;
   }
-  tdActiveIdx=-1;
+  nomAddActiveIdx=-1;
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
   td.innerHTML=matches.map((p,i)=>{
     const av=avMap.get(p.display_name.toLowerCase());
     const valHtml=av
       ?`<span class="td-item-val">$${av.auction_value}</span>`
       :`<span class="td-item-val" style="color:var(--text3);">—</span>`;
-    return `<div class="td-item" data-idx="${i}" onmousedown="selectPlayer(${i})" onmouseover="setTdActive(${i})">
+    return `<div class="td-item" data-idx="${i}" onmousedown="selectNomAddPlayer(${i})" onmouseover="setNomAddActive(${i})">
       <span class="ptag ${pc[p.position]||''}" style="flex-shrink:0;">${p.position}</span>
       <span class="td-item-name">${p.display_name}</span>
       <span class="td-item-team">${p.latest_team||''}</span>
@@ -819,184 +798,199 @@ function onPlayerSearch(val){
   td.classList.add('open');
 }
 
-function setTdActive(i){
-  tdActiveIdx=i;
-  document.querySelectorAll('.td-item').forEach((el,j)=>el.classList.toggle('active',j===i));
+function setNomAddActive(i){
+  nomAddActiveIdx=i;
+  document.querySelectorAll('#nom-add-td .td-item').forEach((el,j)=>el.classList.toggle('active',j===i));
 }
 
-function selectPlayer(i){
-  const td=document.getElementById('td');
+function selectNomAddPlayer(i){
+  const td=document.getElementById('nom-add-td');
   const p=(td._matches||[])[i];
   if(!p)return;
-  selectedPlayer=p;
-  document.getElementById('pn').value=p.display_name;
+  selectedNomAddPlayer=p;
+  document.getElementById('nom-add-pn').value=p.display_name;
   td.classList.remove('open');
-  setAutofill(p);
-  document.getElementById('ps').focus();
 }
 
-function setAutofill(p){
-  const afPos=document.getElementById('af-pos'),afAge=document.getElementById('af-age'),
-        afTeam=document.getElementById('af-team'),afAv=document.getElementById('af-av');
-  if(!p){
-    afPos.textContent='Pos —';   afPos.className='autofill-badge empty';
-    afAge.textContent='Age —';   afAge.className='autofill-badge empty';
-    afTeam.textContent='Team —'; afTeam.className='autofill-badge empty';
-    afAv.textContent='Target —'; afAv.className='autofill-badge empty';
-    return;
-  }
-  afPos.textContent=p.position;                       afPos.className='autofill-badge filled';
-  afAge.textContent=p.age!=null?p.age+'y':'Age —';    afAge.className='autofill-badge filled';
-  afTeam.textContent=p.latest_team||'—';              afTeam.className='autofill-badge filled';
-  const av=avMap.get(p.display_name.toLowerCase());
-  if(av){ afAv.textContent=`Target $${av.auction_value} · ${av.tier}`; afAv.className='autofill-badge av-filled'; }
-  else  { afAv.textContent='Target —'; afAv.className='autofill-badge empty'; }
-}
-
-function onSearchKey(e){
-  const td=document.getElementById('td');
+function onNomAddKey(e){
+  const td=document.getElementById('nom-add-td');
   if(!td.classList.contains('open'))return;
   const items=td.querySelectorAll('.td-item');if(!items.length)return;
-  if(e.key==='ArrowDown'){e.preventDefault();tdActiveIdx=Math.min(tdActiveIdx+1,items.length-1);setTdActive(tdActiveIdx);items[tdActiveIdx].scrollIntoView({block:'nearest'});}
-  else if(e.key==='ArrowUp'){e.preventDefault();tdActiveIdx=Math.max(tdActiveIdx-1,0);setTdActive(tdActiveIdx);items[tdActiveIdx].scrollIntoView({block:'nearest'});}
-  else if(e.key==='Enter'){e.preventDefault();if(tdActiveIdx>=0)selectPlayer(tdActiveIdx);}
+  if(e.key==='ArrowDown'){e.preventDefault();nomAddActiveIdx=Math.min(nomAddActiveIdx+1,items.length-1);setNomAddActive(nomAddActiveIdx);items[nomAddActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='ArrowUp'){e.preventDefault();nomAddActiveIdx=Math.max(nomAddActiveIdx-1,0);setNomAddActive(nomAddActiveIdx);items[nomAddActiveIdx].scrollIntoView({block:'nearest'});}
+  else if(e.key==='Enter'){e.preventDefault();if(nomAddActiveIdx>=0)selectNomAddPlayer(nomAddActiveIdx);}
   else if(e.key==='Escape'){td.classList.remove('open');}
-}
-
-document.addEventListener('click',e=>{
-  if(!e.target.closest('.player-search-wrap')){
-    document.getElementById('td').classList.remove('open');
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3b. On The Block — live nomination check (target vs. pass while bidding is live)
-// ─────────────────────────────────────────────────────────────────────────────
-let nomPlayer=null;
-let nomActiveIdx=-1;
-
-function onNomSearch(val){
-  nomPlayer=null;
-  const q=val.trim().toLowerCase();
-  const td=document.getElementById('nom-td');
-  if(!q){td.classList.remove('open');renderNomRec();return;}
-  const already=new Set(players.map(p=>p.name.toLowerCase()));
-  const matches=rosterList
-    .filter(p=>p.display_name.toLowerCase().includes(q)&&!already.has(p.display_name.toLowerCase()))
-    .slice(0,40);
-  if(!matches.length){
-    td.innerHTML='<div class="td-empty">No players found</div>';
-    td.classList.add('open');nomActiveIdx=-1;renderNomRec();return;
-  }
-  nomActiveIdx=-1;
-  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
-  td.innerHTML=matches.map((p,i)=>{
-    const av=avMap.get(p.display_name.toLowerCase());
-    const valHtml=av
-      ?`<span class="td-item-val">$${av.auction_value}</span>`
-      :`<span class="td-item-val" style="color:var(--text3);">—</span>`;
-    return `<div class="td-item" data-idx="${i}" onmousedown="selectNomPlayer(${i})" onmouseover="setNomActive(${i})">
-      <span class="ptag ${pc[p.position]||''}" style="flex-shrink:0;">${p.position}</span>
-      <span class="td-item-name">${p.display_name}</span>
-      <span class="td-item-team">${p.latest_team||''}</span>
-      <span class="td-item-age">${p.age!=null?p.age+'y':'—'}</span>
-      ${valHtml}
-    </div>`;
-  }).join('');
-  td._matches=matches;
-  td.classList.add('open');
-}
-
-function setNomActive(i){
-  nomActiveIdx=i;
-  document.querySelectorAll('#nom-td .td-item').forEach((el,j)=>el.classList.toggle('active',j===i));
-}
-
-function selectNomPlayer(i){
-  const td=document.getElementById('nom-td');
-  const p=(td._matches||[])[i];
-  if(!p)return;
-  nomPlayer=p;
-  document.getElementById('nom-pn').value=p.display_name;
-  td.classList.remove('open');
-  document.getElementById('nom-bid').focus();
-  renderNomRec();
-}
-
-function onNomKey(e){
-  const td=document.getElementById('nom-td');
-  if(!td.classList.contains('open'))return;
-  const items=td.querySelectorAll('.td-item');if(!items.length)return;
-  if(e.key==='ArrowDown'){e.preventDefault();nomActiveIdx=Math.min(nomActiveIdx+1,items.length-1);setNomActive(nomActiveIdx);items[nomActiveIdx].scrollIntoView({block:'nearest'});}
-  else if(e.key==='ArrowUp'){e.preventDefault();nomActiveIdx=Math.max(nomActiveIdx-1,0);setNomActive(nomActiveIdx);items[nomActiveIdx].scrollIntoView({block:'nearest'});}
-  else if(e.key==='Enter'){e.preventDefault();if(nomActiveIdx>=0)selectNomPlayer(nomActiveIdx);}
-  else if(e.key==='Escape'){td.classList.remove('open');}
-}
-
-function clearNom(){
-  nomPlayer=null;
-  document.getElementById('nom-pn').value='';
-  document.getElementById('nom-bid').value='';
-  document.getElementById('nom-td').classList.remove('open');
-  renderNomRec();
 }
 
 document.addEventListener('click',e=>{
   if(!e.target.closest('#nom-card .player-search-wrap')){
-    document.getElementById('nom-td').classList.remove('open');
+    document.getElementById('nom-add-td').classList.remove('open');
   }
 });
 
-function renderNomRec(){
-  const el=document.getElementById('nom-rec');
-  if(!el) return;
-  if(!nomPlayer){ el.innerHTML=''; return; }
+function addNomination(){
+  if(!selectedNomAddPlayer){document.getElementById('nom-add-pn').focus();return;}
+  if(nominations.length>=MAX_NOMINATIONS){alert(`Max ${MAX_NOMINATIONS} concurrent nominations.`);return;}
+  const p=selectedNomAddPlayer;
+  if(alreadyOnBlockOrDrafted(p.display_name)) return;
+  nominations.push({id:crypto.randomUUID(),player:p,bid:'',owner:MY_TEAM,yrs:1});
+  document.getElementById('nom-add-pn').value='';
+  selectedNomAddPlayer=null;
+  renderNominations();
+}
 
-  const bid=parseFloat(document.getElementById('nom-bid').value)||0;
-  const pos=nomPlayer.position;
-  const av=avMap.get(nomPlayer.display_name.toLowerCase());
-  const myPicks=players.filter(p=>(p.owner||MY_TEAM)===MY_TEAM);
-  const spent=myPicks.reduce((s,p)=>s+p.sal,0);
-  const remaining=250-spent;
-  const plan=SPEND_PLAN[pos];
-  const { groups }=computeSpendVsPlan(myPicks);
-  const grp=groups[pos]||{spent:0,count:0};
-  const planBudget=plan?plan.budget:0;
-  const posRemaining=plan?planBudget-grp.spent:null;
+function removeNomination(id){
+  nominations=nominations.filter(n=>n.id!==id);
+  renderNominations();
+}
+
+function onNomBidInput(id,val){
+  const nom=nominations.find(n=>n.id===id);
+  if(!nom)return;
+  nom.bid=val;
+  updateNomRowVerdict(id);
+}
+
+function onNomOwnerChange(id,val){
+  const nom=nominations.find(n=>n.id===id);
+  if(!nom)return;
+  nom.owner=val;
+  updateNomRowVerdict(id);
+}
+
+function onNomYrsChange(id,val){
+  const nom=nominations.find(n=>n.id===id);
+  if(!nom)return;
+  nom.yrs=parseInt(val)||1;
+}
+
+// Confirm the nomination as won — this is the only path a pick is logged.
+async function winNomination(id){
+  const nom=nominations.find(n=>n.id===id);
+  if(!nom)return;
+  const bid=parseFloat(nom.bid);
+  if(!bid||bid<=0){alert('Enter the winning bid before confirming.');return;}
+  const owner=nom.owner||MY_TEAM;
+  const yrs=nom.yrs||1;
+  const p=nom.player;
+  if(players.some(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase())){
+    alert(`${p.display_name} is already drafted.`);
+    nominations=nominations.filter(n=>n.id!==id);renderNominations();return;
+  }
+  const ownerSpent=players.filter(pl=>(pl.owner||MY_TEAM)===owner).reduce((s,pl)=>s+pl.sal,0);
+  if(ownerSpent+bid>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
+  const player={pick_id:crypto.randomUUID(),owner,name:p.display_name,pos:p.position,
+    age:p.age!=null?parseInt(p.age):null,sal:bid,yrs};
+  players.push(player);
+  writeToBQ(player);
+  nominations=nominations.filter(n=>n.id!==id);
+  // Jump the view to the team that just won the player so you see it land
+  viewedTeam=owner;
+  const teamSel=document.getElementById('team-selector');
+  if(teamSel){teamSel.value=owner;teamSel.classList.toggle('is-me',owner===MY_TEAM);}
+  renderNominations();
+  updBudget();
+}
+
+function tierClassOf(t){
+  return t==='TIER 1'?'t1':t==='TIER 2'?'t2':t==='TIER 3'?'t3':'t4';
+}
+
+// Verdict for a single nomination row, evaluated against its assigned owner's
+// budget + spending plan (so switching "Won by" re-checks fit for that team).
+function computeNomVerdict(nom){
+  const p=nom.player,pos=p.position;
+  const av=avMap.get(p.display_name.toLowerCase());
+  const bid=parseFloat(nom.bid)||0;
+  const ownerPicks=players.filter(pl=>(pl.owner||MY_TEAM)===nom.owner);
+  const ownerSpent=ownerPicks.reduce((s,pl)=>s+pl.sal,0);
+  const ownerRemaining=250-ownerSpent;
+
+  let planLine='';
+  if(nom.owner===MY_TEAM){
+    const plan=SPEND_PLAN[pos];
+    if(plan){
+      const {groups}=computeSpendVsPlan(ownerPicks);
+      const grp=groups[pos]||{spent:0};
+      const posRemaining=plan.budget-grp.spent;
+      planLine=` · ${pos} plan: $${grp.spent}/$${plan.budget}, ${posRemaining<0?'$'+Math.abs(posRemaining)+' over':'$'+posRemaining+' left'}`;
+    }
+  }
 
   if(!av){
-    el.innerHTML=`<div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);padding:10px 0;">No target value found for ${nomPlayer.display_name} — not on the auction values board.</div>`;
-    return;
+    return `<div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">No target value on board · ${nom.owner} has $${ownerRemaining} left</div>`;
   }
 
   let verdict,color;
-  if(bid<=0){ verdict='Enter the current bid'; color='var(--text3)'; }
-  else if(bid>remaining){ verdict="CAN'T AFFORD"; color='var(--red)'; }
+  if(bid<=0){verdict='Enter bid';color='var(--text3)';}
+  else if(bid>ownerRemaining){verdict="CAN'T AFFORD";color='var(--red)';}
   else{
     const diffPct=(bid-av.auction_value)/av.auction_value;
-    if(diffPct<=0){ verdict='TARGET — at or under value'; color='var(--green)'; }
-    else if(diffPct<=0.15){ verdict='CAUTION — near market'; color='var(--amber)'; }
-    else{ verdict='PASS — overpay'; color='var(--red)'; }
+    if(diffPct<=0){verdict='TARGET';color='var(--green)';}
+    else if(diffPct<=0.15){verdict='CAUTION';color='var(--amber)';}
+    else{verdict='PASS';color='var(--red)';}
   }
 
-  const posOver=posRemaining!=null && posRemaining<0;
-  const posLine=plan
-    ?` · ${pos} plan: $${grp.spent}/$${planBudget} spent, ${posOver?'$'+Math.abs(posRemaining)+' over':'$'+posRemaining+' left'}`
-    :'';
+  return `<div style="font-family:var(--font-head);font-size:14px;font-weight:800;color:${color};">${verdict}</div>
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);">Target $${av.auction_value} · ${av.tier}${planLine} · ${nom.owner} has $${ownerRemaining} left</div>`;
+}
 
-  el.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;flex-wrap:wrap;">
-      <div>
-        <div style="font-family:var(--font-head);font-size:18px;font-weight:800;color:${color};">${verdict}</div>
-        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);margin-top:4px;">
-          Target $${av.auction_value} · ${av.tier} #${av.rank}${posLine}
-        </div>
+function updateNomRowVerdict(id){
+  const nom=nominations.find(n=>n.id===id);
+  const el=document.getElementById('nom-verdict-'+id);
+  if(!nom||!el)return;
+  el.innerHTML=computeNomVerdict(nom);
+}
+
+function buildNomRowHtml(nom){
+  const p=nom.player,pos=p.position;
+  const av=avMap.get(p.display_name.toLowerCase());
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  return `<div class="tgt-card" id="nom-row-${nom.id}" style="grid-template-columns:auto 1fr auto;align-items:center;">
+    <div class="tgt-rank">${av?'#'+av.rank:'—'}</div>
+    <div class="tgt-info">
+      <div class="tgt-name">
+        ${p.display_name}${p.latest_team?' - '+p.latest_team:''}
+        <span class="ptag ${pc[pos]||''}">${pos}</span>
+        ${av?`<span class="tbadge ${tierClassOf(av.tier)}">${av.tier.replace('TIER ','T')}</span>`:''}
       </div>
-      <div style="text-align:right;">
-        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">Your remaining budget</div>
-        <div style="font-family:var(--font-head);font-size:20px;font-weight:800;color:var(--text);">$${remaining}</div>
+      <div class="tgt-meta">${p.age!=null?p.age+'y':''}${av?' · Target $'+av.auction_value:''}</div>
+      <div id="nom-verdict-${nom.id}" style="margin-top:4px;"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:200px;">
+      <div style="display:flex;gap:6px;">
+        <div class="fg" style="flex:0 0 76px;"><input type="number" min="0" placeholder="Bid $" value="${nom.bid}" oninput="onNomBidInput('${nom.id}',this.value)"/></div>
+        <div class="fg" style="flex:1;"><select onchange="onNomOwnerChange('${nom.id}',this.value)">
+          ${TEAMS.map(t=>`<option value="${t}"${t===nom.owner?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('')}
+        </select></div>
       </div>
-    </div>`;
+      <div class="fg"><select onchange="onNomYrsChange('${nom.id}',this.value)">
+        <option value="1"${nom.yrs===1?' selected':''}>1 year</option>
+        <option value="2"${nom.yrs===2?' selected':''}>2 years (−8%)</option>
+        <option value="3"${nom.yrs===3?' selected':''}>3 years (−16%)</option>
+        <option value="4"${nom.yrs===4?' selected':''}>4 years (−24%)</option>
+      </select></div>
+      <div style="display:flex;gap:6px;">
+        <button class="add-btn" style="flex:1;padding:8px;font-size:12px;" onclick="winNomination('${nom.id}')">Win</button>
+        <button class="del-btn" onclick="removeNomination('${nom.id}')" aria-label="Remove nomination" title="Remove nomination">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderNominations(){
+  const el=document.getElementById('nom-list');
+  const countEl=document.getElementById('nom-count');
+  if(countEl) countEl.textContent=`${nominations.length} / ${MAX_NOMINATIONS} on the block`;
+  if(!el) return;
+  if(!nominations.length){
+    el.innerHTML='<div class="empty-state">No players on the block yet — nominate one above.</div>';
+    return;
+  }
+  el.innerHTML=nominations.map(buildNomRowHtml).join('');
+  nominations.forEach(n=>updateNomRowVerdict(n.id));
 }
 
 async function writeToBQ(player){
@@ -1069,14 +1063,9 @@ function boardView(view){
 // Picks belonging to the team currently being viewed
 function viewedPicks(){ return players.filter(p => (p.owner||MY_TEAM) === viewedTeam); }
 
-// Populate the form owner dropdown + the team-selector dropdown
+// Populate the team-selector dropdown
 function buildTeamDropdowns(){
-  const ownerSel=document.getElementById('powner');
   const teamSel=document.getElementById('team-selector');
-  if(ownerSel){
-    ownerSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===MY_TEAM?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
-    draftOwner=ownerSel.value;
-  }
   if(teamSel){
     teamSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===viewedTeam?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
     teamSel.classList.toggle('is-me',viewedTeam===MY_TEAM);
@@ -1124,7 +1113,7 @@ function updBudget(){
   renderLeagueSummary();
   renderCapBreakdown();
   renderSpendPlan();
-  renderNomRec();
+  nominations.forEach(n=>updateNomRowVerdict(n.id));
 }
 
 // Multi-year cap space + contract availability for the viewed team
@@ -1280,29 +1269,6 @@ function renderPlayers(){
   }).join('');
 }
 
-function addP(){
-  if(!selectedPlayer){document.getElementById('pn').focus();return;}
-  const name=selectedPlayer.display_name,pos=selectedPlayer.position;
-  const age=selectedPlayer.age!=null?parseInt(selectedPlayer.age):null;
-  const sal=parseInt(document.getElementById('ps').value)||0;
-  const yrs=parseInt(document.getElementById('py').value)||1;
-  const owner=document.getElementById('powner').value||MY_TEAM;
-  if(!sal){document.getElementById('ps').focus();return;}
-  // Off the board if ANY team already has them
-  if(players.some(p=>p.name.toLowerCase()===name.toLowerCase())){showBQStatus('duplicate',`${name} is already drafted`);return;}
-  // Budget check against the WINNING team's spend
-  const ownerSpent=players.filter(p=>(p.owner||MY_TEAM)===owner).reduce((s,p)=>s+p.sal,0);
-  if(ownerSpent+sal>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
-  const player={pick_id:crypto.randomUUID(),owner,name,pos,age,sal,yrs};
-  players.push(player);writeToBQ(player);
-  document.getElementById('pn').value='';document.getElementById('ps').value='';
-  selectedPlayer=null;setAutofill(null);
-  // Jump the view to the team that just won the player so you see it land
-  viewedTeam=owner;
-  const teamSel=document.getElementById('team-selector');
-  if(teamSel){ teamSel.value=owner; teamSel.classList.toggle('is-me',owner===MY_TEAM); }
-  updBudget();
-}
 
 async function delP(i){
   const player=players[i];players.splice(i,1);updBudget();
