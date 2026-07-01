@@ -1,9 +1,10 @@
 const { BigQuery } = require('@google-cloud/bigquery');
 
 const bq = new BigQuery();
-const DATASET = 'dynasty_tycoon';
-const TABLE   = 'draft_picks';
-const PROJECT = 'ff-python-api';
+const DATASET   = 'dynasty_tycoon';
+const TABLE     = 'draft_picks';
+const NOM_TABLE = 'nominations';
+const PROJECT   = 'ff-python-api';
 
 exports.draftPicksInsert = async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -156,6 +157,20 @@ exports.draftPicksInsert = async (req, res) => {
       return;
     }
 
+    // ?nominations=1  →  players currently on the block, shared across all devices
+    if (req.query.nominations === '1') {
+      try {
+        const [rows] = await bq.query({
+          query: `SELECT * FROM \`${PROJECT}.${DATASET}.${NOM_TABLE}\` ORDER BY updated_at ASC`,
+        });
+        res.status(200).json({ nominations: rows });
+      } catch (err) {
+        console.error('Nominations load error:', err);
+        res.status(500).json({ error: 'Failed to load nominations', message: err.message });
+      }
+      return;
+    }
+
     // default: load existing draft picks
     try {
       const [rows] = await bq.query({
@@ -171,6 +186,22 @@ exports.draftPicksInsert = async (req, res) => {
 
   // ── DELETE ────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE') {
+    if (req.query.nomination_id) {
+      const nomination_id = req.query.nomination_id;
+      try {
+        await bq.query({
+          query: `DELETE FROM \`${PROJECT}.${DATASET}.${NOM_TABLE}\` WHERE nomination_id = @nomination_id`,
+          params: { nomination_id: String(nomination_id) },
+        });
+        console.log(`Deleted nomination: ${nomination_id}`);
+        res.status(200).json({ success: true, nomination_id });
+      } catch (err) {
+        console.error('Nomination delete error:', err);
+        res.status(500).json({ error: 'Failed to delete nomination', message: err.message });
+      }
+      return;
+    }
+
     const pick_id = req.query.pick_id;
     if (!pick_id) { res.status(400).json({ error: 'Missing pick_id' }); return; }
     try {
@@ -189,6 +220,48 @@ exports.draftPicksInsert = async (req, res) => {
 
   // ── POST ──────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
+    // ?nomination=1  →  upsert a live nomination (shared board, keyed by nomination_id)
+    if (req.query.nomination === '1') {
+      const body = req.body;
+      const required = ['nomination_id', 'player_name', 'position'];
+      for (const f of required) {
+        if (body[f] === undefined || body[f] === null || body[f] === '') {
+          res.status(400).json({ error: `Missing required field: ${f}` }); return;
+        }
+      }
+      try {
+        await bq.query({
+          query: `
+            MERGE \`${PROJECT}.${DATASET}.${NOM_TABLE}\` T
+            USING (SELECT @nomination_id AS nomination_id) S
+            ON T.nomination_id = S.nomination_id
+            WHEN MATCHED THEN UPDATE SET
+              bid = @bid, owner = @owner, contract_yrs = @contract_yrs, updated_at = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT
+              (nomination_id, player_name, position, age, latest_team, gsis_id, bid, owner, contract_yrs, updated_at)
+              VALUES (@nomination_id, @player_name, @position, @age, @latest_team, @gsis_id, @bid, @owner, @contract_yrs, CURRENT_TIMESTAMP())
+          `,
+          params: {
+            nomination_id: String(body.nomination_id),
+            player_name: String(body.player_name),
+            position: String(body.position),
+            age: body.age != null ? parseInt(body.age) : null,
+            latest_team: body.latest_team != null ? String(body.latest_team) : null,
+            gsis_id: body.gsis_id != null ? String(body.gsis_id) : null,
+            bid: parseFloat(body.bid) || 0,
+            owner: String(body.owner || 'NashStallings'),
+            contract_yrs: parseInt(body.contract_yrs) || 1,
+          },
+          types: { age: 'INT64', bid: 'NUMERIC', contract_yrs: 'INT64' },
+        });
+        res.status(200).json({ success: true, nomination_id: body.nomination_id });
+      } catch (err) {
+        console.error('Nomination upsert error:', err);
+        res.status(500).json({ error: 'Failed to save nomination', message: err.message });
+      }
+      return;
+    }
+
     const body = req.body;
     const required = ['pick_id', 'player_name', 'position', 'salary', 'contract_yrs'];
     for (const f of required) {
