@@ -118,7 +118,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .pos-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
 .pos-pill{font-family:var(--font-mono);font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid;}
 .add-form-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;}
-.form-title{font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.form-title{font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .form-title::before{content:'';width:3px;height:18px;background:var(--green);border-radius:2px;display:block;}
 .fg{display:flex;flex-direction:column;gap:5px;}
 .fg label{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);}
@@ -293,10 +293,18 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .tgt-price{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .tgt-bid{font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green);}
 .tgt-bid-label{font-family:var(--font-mono);font-size:10px;color:var(--text3);}
+/* Nominations Board rows */
+.tgt-card.nom-card-row{grid-template-columns:auto 1fr auto;}
+.nom-controls{display:flex;flex-direction:column;gap:6px;min-width:200px;}
+.nom-controls-row{display:flex;gap:6px;flex-wrap:wrap;}
 @media(max-width:640px){
   .tgt-roster-block{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
   .tgt-card{grid-template-columns:24px 1fr auto;gap:8px;padding:11px 12px;}
   .tgt-bid{font-size:18px;}
+  .tgt-card.nom-card-row{grid-template-columns:1fr;}
+  .tgt-card.nom-card-row .tgt-rank{display:none;}
+  .nom-controls{min-width:0;width:100%;}
+  .nom-controls-row .fg{flex:1 1 120px;}
   .tgt-why{display:none;}
 }
 
@@ -336,6 +344,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   .player-row-item{grid-template-columns:1fr 44px 64px 100px 28px;padding:10px 12px;font-size:12px;}
   .player-row-item .player-cell:first-of-type,.player-row-item .player-cell:nth-of-type(2),.player-row-item .player-cell:nth-of-type(3){display:none;}
   .av-filter-bar{gap:5px;}.av-sort-wrap{margin-left:0;width:100%;}
+  .av-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .av-table{font-size:11px;}
+  .av-table thead th,.av-table tbody td{padding:7px 8px;white-space:nowrap;}
+  .av-note{max-width:160px;white-space:normal;}
   .eval-search-wrap{flex-direction:column;align-items:stretch;gap:8px;margin-bottom:16px;}
   .eval-search-wrap .fg{max-width:100%!important;}
   .eval-status{padding-bottom:0;}
@@ -1103,7 +1115,7 @@ function buildNomRowHtml(nom){
   const p=nom.player,pos=p.position;
   const av=avMap.get(p.display_name.toLowerCase());
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
-  return `<div class="tgt-card" id="nom-row-${nom.id}" style="grid-template-columns:auto 1fr auto;align-items:center;">
+  return `<div class="tgt-card nom-card-row" id="nom-row-${nom.id}">
     <div class="tgt-rank">${av?'#'+av.rank:'—'}</div>
     <div class="tgt-info">
       <div class="tgt-name">
@@ -1114,8 +1126,8 @@ function buildNomRowHtml(nom){
       <div class="tgt-meta">${p.age!=null?p.age+'y':''}${av?' · Target $'+av.auction_value:''}</div>
       <div id="nom-verdict-${nom.id}" style="margin-top:4px;"></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;min-width:200px;">
-      <div style="display:flex;gap:6px;">
+    <div class="nom-controls">
+      <div class="nom-controls-row">
         <div class="fg" style="flex:0 0 76px;"><input id="nom-bid-${nom.id}" type="number" min="0" placeholder="Bid $" value="${nom.bid}" oninput="onNomBidInput('${nom.id}',this.value)"/></div>
         <div class="fg" style="flex:1;"><select onchange="onNomOwnerChange('${nom.id}',this.value)">
           ${TEAMS.map(t=>`<option value="${t}"${t===nom.owner?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('')}
