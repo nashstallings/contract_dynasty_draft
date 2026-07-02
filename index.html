@@ -364,10 +364,27 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('board',this)">Board</button>
+  <button class="tab-btn" onclick="sw('teams',this)">Teams</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
   <button class="tab-btn" onclick="sw('plan',this)">League Rules</button>
 </div>
 <div class="tab-divider"></div>
+
+<!-- ========== TEAMS PANEL ========== -->
+<div class="panel" id="p-teams">
+  <div class="board-head">
+    <div style="font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text);">League Team Makeup</div>
+    <div class="board-head-right">
+      <div class="tgt-refresh-status" id="teams-refresh-status"></div>
+      <button class="tgt-refresh-btn" id="teams-refresh-btn" onclick="refreshTeamsTab()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+  <div id="teams-content"></div>
+  <div style="height:40px;"></div>
+</div>
 
 <!-- ========== PLAN PANEL ========== -->
 <div class="panel" id="p-plan">
@@ -1174,6 +1191,7 @@ function sw(id,btn){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('on');
   if(id==='board'){ boardView(boardCurrentView); }
+  else if(id==='teams'){ renderTeamsTab(); refreshTeamsTab(); }
 }
 
 // Refresh button — re-pull whichever sub-view is active. All re-fetch live BQ data.
@@ -1376,6 +1394,100 @@ function renderLeagueSummary(){
   const totalDrafted=players.length;
   const mySpent=players.filter(p=>(p.owner||MY_TEAM)===MY_TEAM).reduce((s,p)=>s+p.sal,0);
   el.innerHTML=`${totalDrafted} drafted leaguewide · you've spent $${mySpent}/$250`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Teams tab — every team's position counts + spend, plus league-wide scarcity
+// (drafted vs. remaining pool per position) to inform who's worth nominating.
+// ─────────────────────────────────────────────────────────────────────────────
+const TEAMS_POS_COLOR={QB:'#60A5FA',RB:'#FCD34D',WR:'#34D399',TE:'#E879B0'};
+
+async function refreshTeamsTab(){
+  const btn=document.getElementById('teams-refresh-btn');
+  const status=document.getElementById('teams-refresh-status');
+  if(btn) btn.classList.add('spinning');
+  if(status){ status.textContent='● Refreshing…'; status.className='tgt-refresh-status loading'; }
+  try{
+    await loadFromBQ();
+    renderTeamsTab();
+    const ts=new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    if(status){ status.textContent=`✓ Live · ${ts}`; status.className='tgt-refresh-status live'; }
+  }catch(err){
+    console.error('Teams tab refresh failed:',err);
+    if(status){ status.textContent='✕ Refresh failed — showing last known'; status.className='tgt-refresh-status error'; }
+  }
+  if(btn) btn.classList.remove('spinning');
+}
+
+function renderTeamsTab(){
+  const el=document.getElementById('teams-content');
+  if(!el) return;
+
+  const positions=['QB','RB','WR','TE'];
+  const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
+
+  // League-wide totals: drafted count/spend per position, and how many players
+  // with a target value are still undrafted at that position (the visible pool).
+  const posTotals={}; positions.forEach(pos=>posTotals[pos]={count:0,spent:0});
+  players.forEach(p=>{ if(posTotals[p.pos]){ posTotals[p.pos].count++; posTotals[p.pos].spent+=p.sal; } });
+
+  const leagueSlots={}; positions.forEach(pos=>leagueSlots[pos]=(TOTAL_TARGET[pos]||0)*TEAMS.length);
+
+  const poolLeft={}; positions.forEach(pos=>poolLeft[pos]=0);
+  (auctionValues||[]).forEach(r=>{
+    if(poolLeft[r.position]!=null && !draftedNames.has(r.player_name.toLowerCase())) poolLeft[r.position]++;
+  });
+
+  const scarcityHtml=`<div class="rules-grid">`+positions.map(pos=>{
+    const t=posTotals[pos];
+    const avg=t.count?(t.spent/t.count).toFixed(1):'—';
+    return `<div class="rule-card">
+      <div class="rule-label" style="color:${TEAMS_POS_COLOR[pos]};">${pos}</div>
+      <div class="rule-value">${t.count}<span>/${leagueSlots[pos]} slots</span></div>
+      <div class="rule-detail">$${t.spent} spent leaguewide · $${avg} avg · <strong style="color:var(--text);">${poolLeft[pos]}</strong> left on board</div>
+    </div>`;
+  }).join('')+`</div>`;
+
+  // Per-team breakdown, sorted by remaining budget — teams with the most left
+  // to spend are the ones most likely to outbid you.
+  const teamRows=TEAMS.map(team=>{
+    const tp=players.filter(p=>(p.owner||MY_TEAM)===team);
+    const spent=tp.reduce((s,p)=>s+p.sal,0);
+    const posBreak={}; positions.forEach(pos=>posBreak[pos]={count:0,spent:0});
+    tp.forEach(p=>{ if(posBreak[p.pos]){ posBreak[p.pos].count++; posBreak[p.pos].spent+=p.sal; } });
+    return { team, count:tp.length, spent, remaining:250-spent, posBreak };
+  }).sort((a,b)=>b.remaining-a.remaining);
+
+  const tableRows=teamRows.map(r=>{
+    const isMe=r.team===MY_TEAM;
+    const cells=positions.map(pos=>{
+      const b=r.posBreak[pos];
+      return `<td class="r"><span style="color:${TEAMS_POS_COLOR[pos]};font-weight:600;">${b.count}</span><span style="color:var(--text3);"> · $${b.spent}</span></td>`;
+    }).join('');
+    const remCol=r.remaining>100?'var(--green)':r.remaining>50?'var(--amber)':'var(--red)';
+    return `<tr${isMe?' style="background:var(--green-dim);"':''}>
+      <td style="font-weight:${isMe?700:500};color:${isMe?'var(--green)':'var(--text)'};">${r.team}${isMe?' (you)':''}</td>
+      ${cells}
+      <td class="r" style="font-weight:600;">${r.count}</td>
+      <td class="r" style="font-weight:600;">$${r.spent}</td>
+      <td class="r" style="color:${remCol};font-weight:700;">$${r.remaining}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div class="section-label">League Position Scarcity</div>
+    ${scarcityHtml}
+    <div class="section-label">Team Breakdown <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">sorted by budget remaining — biggest threats to your bids first</span></div>
+    <div class="av-table-wrap">
+      <table class="av-table" style="font-family:var(--font-mono);">
+        <thead><tr>
+          <th>Team</th>
+          <th class="r">QB</th><th class="r">RB</th><th class="r">WR</th><th class="r">TE</th>
+          <th class="r">Players</th><th class="r">Spent</th><th class="r">Remaining</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderPlayers(){
