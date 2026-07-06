@@ -141,6 +141,13 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .del-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:4px;display:flex;align-items:center;justify-content:center;margin-left:auto;transition:color .15s,background .15s;}
 .del-btn:hover{color:var(--red);background:var(--red-dim);}
 .empty-state{padding:40px 24px;text-align:center;color:var(--text3);font-size:13px;}
+/* leaguewide draft history (Teams tab): team · name · pos · age · salary · contract · cap/yr · del */
+.hist-list-header{display:grid;grid-template-columns:120px 1fr 56px 40px 64px 100px 80px 32px;padding:10px 20px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);border-bottom:1px solid var(--border);background:var(--surface);}
+.hist-row-item{display:grid;grid-template-columns:120px 1fr 56px 40px 64px 100px 80px 32px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .15s;}
+.hist-row-item:last-child{border-bottom:none;}
+.hist-row-item:hover{background:var(--card2);}
+.hist-team-cell{font-family:var(--font-mono);font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hist-team-cell.is-me{color:var(--green);font-weight:600;}
 /* over/under badge */
 .ou-badge{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;white-space:nowrap;}
 .ou-over{background:#F04D4D22;color:#F07070;}
@@ -343,6 +350,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   .player-list-header span:nth-child(3),.player-list-header span:nth-child(5),.player-list-header span:nth-child(6){display:none;}
   .player-row-item{grid-template-columns:1fr 44px 64px 100px 28px;padding:10px 12px;font-size:12px;}
   .player-row-item .player-cell:first-of-type,.player-row-item .player-cell:nth-of-type(2),.player-row-item .player-cell:nth-of-type(3){display:none;}
+  /* collapse draft history: hide age and contract, keep team/name/pos/salary/cap/del */
+  .hist-list-header{grid-template-columns:70px 1fr 40px 56px 68px 28px;padding:8px 12px;font-size:9px;}
+  .hist-row-item{grid-template-columns:70px 1fr 40px 56px 68px 28px;padding:10px 12px;font-size:12px;}
+  .hist-age-cell,.hist-contract-cell{display:none;}
   .av-filter-bar{gap:5px;}.av-sort-wrap{margin-left:0;width:100%;}
   .av-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .av-table{font-size:11px;}
@@ -1283,6 +1294,7 @@ function updBudget(){
   renderLeagueSummary();
   renderCapBreakdown();
   renderSpendPlan();
+  renderTeamsTab();
   nominations.forEach(n=>updateNomRowVerdict(n.id));
 }
 
@@ -1486,6 +1498,29 @@ function renderTeamsTab(){
     </tr>`;
   }).join('');
 
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+  // Draft history: every pick leaguewide, newest first (players[] is appended
+  // in draft order, so reverse it for a most-recent-on-top activity feed).
+  const historyHtml=[...players].reverse().map(p=>{
+    const gi=players.indexOf(p);
+    const d=DISC[p.yrs]||0;
+    const cap=(p.sal*(1-d)).toFixed(1);
+    const owner=p.owner||MY_TEAM;
+    const isMe=owner===MY_TEAM;
+    return `<div class="hist-row-item">
+      <span class="hist-team-cell${isMe?' is-me':''}">${owner}</span>
+      <span class="player-name-cell">${p.name}</span>
+      <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
+      <span class="player-cell hist-age-cell">${p.age}</span>
+      <span class="player-cell bold">$${p.sal}</span>
+      <span class="player-cell hist-contract-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
+      <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
+      <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+
   el.innerHTML=`
     <div class="section-label">League Position Scarcity</div>
     ${scarcityHtml}
@@ -1499,6 +1534,17 @@ function renderTeamsTab(){
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
+    </div>
+    <div class="section-label">Draft History <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">${players.length} players drafted leaguewide</span></div>
+    <div class="player-list-card" style="margin-bottom:24px;">
+      <div class="hist-list-header">
+        <span>Team</span><span>Player</span><span style="text-align:center;">Pos</span>
+        <span style="text-align:right;" class="hist-age-cell">Age</span>
+        <span style="text-align:right;">Salary</span>
+        <span style="text-align:right;" class="hist-contract-cell">Contract</span>
+        <span style="text-align:right;">Cap/yr</span><span></span>
+      </div>
+      <div>${historyHtml || '<div class="empty-state">No players drafted leaguewide yet.</div>'}</div>
     </div>`;
 }
 
