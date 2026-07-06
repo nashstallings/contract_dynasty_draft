@@ -131,10 +131,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .add-btn:active{transform:scale(.97);}
 /* extended player list: name · pos · age · salary · target · +/− · contract · cap/yr · del */
 .player-list-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-.player-list-header{display:grid;grid-template-columns:1fr 56px 40px 64px 68px 72px 100px 80px 32px;padding:10px 20px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);border-bottom:1px solid var(--border);background:var(--surface);}
-.player-row-item{display:grid;grid-template-columns:1fr 56px 40px 64px 68px 72px 100px 80px 32px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .15s;}
-.player-row-item:last-child{border-bottom:none;}
-.player-row-item:hover{background:var(--card2);}
 .player-name-cell{font-weight:500;color:var(--text);}
 .player-cell{text-align:right;color:var(--text2);font-family:var(--font-mono);font-size:12px;}
 .player-cell.bold{color:var(--text);font-weight:500;}
@@ -148,6 +144,13 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .hist-row-item:hover{background:var(--card2);}
 .hist-team-cell{font-family:var(--font-mono);font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .hist-team-cell.is-me{color:var(--green);font-weight:600;}
+/* Tracker roster view: slotted starters + bench, showing every position even if unfilled */
+.roster-header{display:grid;grid-template-columns:56px 1fr 56px 40px 64px 68px 72px 100px 80px 32px;padding:10px 20px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:var(--font-mono);border-bottom:1px solid var(--border);background:var(--surface);}
+.roster-row{display:grid;grid-template-columns:56px 1fr 56px 40px 64px 68px 72px 100px 80px 32px;padding:13px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;transition:background .15s;}
+.roster-row:last-child{border-bottom:none;}
+.roster-row:hover{background:var(--card2);}
+.roster-row.empty{opacity:.55;}
+.roster-slot-label{font-family:var(--font-head);font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--text3);text-transform:uppercase;}
 /* over/under badge */
 .ou-badge{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;white-space:nowrap;}
 .ou-over{background:#F04D4D22;color:#F07070;}
@@ -345,15 +348,15 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   .form-row-new .fg:first-child{grid-column:1/-1;}
   .form-row-new .fg:last-child{grid-column:1/-1;}
   .add-btn{width:100%;padding:12px;font-size:15px;}
-  /* collapse tracker: hide age, target, over/under */
-  .player-list-header{grid-template-columns:1fr 44px 64px 100px 28px;padding:8px 12px;font-size:9px;}
-  .player-list-header span:nth-child(3),.player-list-header span:nth-child(5),.player-list-header span:nth-child(6){display:none;}
-  .player-row-item{grid-template-columns:1fr 44px 64px 100px 28px;padding:10px 12px;font-size:12px;}
-  .player-row-item .player-cell:first-of-type,.player-row-item .player-cell:nth-of-type(2),.player-row-item .player-cell:nth-of-type(3){display:none;}
   /* collapse draft history: hide age and contract, keep team/name/pos/salary/cap/del */
   .hist-list-header{grid-template-columns:70px 1fr 40px 56px 68px 28px;padding:8px 12px;font-size:9px;}
   .hist-row-item{grid-template-columns:70px 1fr 40px 56px 68px 28px;padding:10px 12px;font-size:12px;}
   .hist-age-cell,.hist-contract-cell{display:none;}
+  /* collapse roster view: hide age, target, over/under, contract; keep slot/name/pos/salary/cap/del */
+  .roster-header{grid-template-columns:36px 1fr 36px 56px 64px 24px;padding:8px 10px;font-size:9px;}
+  .roster-row{grid-template-columns:36px 1fr 36px 56px 64px 24px;padding:10px 10px;font-size:12px;}
+  .roster-header>:nth-child(4),.roster-header>:nth-child(6),.roster-header>:nth-child(7),.roster-header>:nth-child(8){display:none;}
+  .roster-row>:nth-child(4),.roster-row>:nth-child(6),.roster-row>:nth-child(7),.roster-row>:nth-child(8){display:none;}
   .av-filter-bar{gap:5px;}.av-sort-wrap{margin-left:0;width:100%;}
   .av-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .av-table{font-size:11px;}
@@ -500,14 +503,26 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     <!-- Spending plan vs. actual (only shown for your team) -->
     <div class="spend-plan" id="spend-plan"></div>
 
-    <div class="player-list-card" id="plist-wrap">
-      <div class="player-list-header">
-        <span>Player</span><span style="text-align:center;">Pos</span>
+    <div class="section-label">Starters</div>
+    <div class="player-list-card" id="starters-wrap" style="margin-bottom:24px;">
+      <div class="roster-header">
+        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
         <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
         <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
         <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
       </div>
-      <div id="plist"><div class="empty-state">No players added yet — log your first pick above.</div></div>
+      <div id="starters-list"></div>
+    </div>
+
+    <div class="section-label">Bench <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">15 spots</span></div>
+    <div class="player-list-card" id="bench-wrap">
+      <div class="roster-header">
+        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
+        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
+        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
+        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
+      </div>
+      <div id="bench-list"></div>
     </div>
   </div>
 
@@ -1548,35 +1563,82 @@ function renderTeamsTab(){
     </div>`;
 }
 
-function renderPlayers(){
-  const el=document.getElementById('plist');
-  const tp=viewedPicks();
-  if(!tp.length){
-    el.innerHTML=`<div class="empty-state">No players drafted by ${viewedTeam} yet.</div>`;return;
-  }
+// Literal starting lineup for this league: QB, 2RB, 3WR, TE, 2FLEX (RB/WR/TE), 1SF (any).
+// Distinct from STARTER_MIN/BENCH_TARGET below, which model urgency for the
+// targeting engine rather than the actual lineup shape shown here.
+const ROSTER_STARTER_SLOTS=[
+  {label:'QB',  elig:['QB']},
+  {label:'RB',  elig:['RB']},
+  {label:'RB',  elig:['RB']},
+  {label:'WR',  elig:['WR']},
+  {label:'WR',  elig:['WR']},
+  {label:'WR',  elig:['WR']},
+  {label:'TE',  elig:['TE']},
+  {label:'FLEX',elig:['RB','WR','TE']},
+  {label:'FLEX',elig:['RB','WR','TE']},
+  {label:'SFLX',elig:['QB','RB','WR','TE']},
+];
+const ROSTER_BENCH_COUNT=15;
+
+// Greedy display heuristic — highest-salary players claim strict slots first,
+// then FLEX/SFLX, then whatever's left fills bench. We don't track a real
+// "who's starting" designation, so this is just a sensible default view.
+function assignRosterSlots(tp){
+  const pool=[...tp].sort((a,b)=>b.sal-a.sal);
+  const used=new Array(pool.length).fill(false);
+  const starters=ROSTER_STARTER_SLOTS.map(slot=>{
+    const idx=pool.findIndex((p,i)=>!used[i]&&slot.elig.includes(p.pos));
+    if(idx===-1) return {label:slot.label,player:null};
+    used[idx]=true;
+    return {label:slot.label,player:pool[idx]};
+  });
+  const bench=pool.filter((p,i)=>!used[i]);
+  const benchCount=Math.max(ROSTER_BENCH_COUNT,bench.length);
+  const benchRows=Array.from({length:benchCount},(_,i)=>({label:'BN',player:bench[i]||null}));
+  return {starters,benchRows};
+}
+
+function buildRosterRowHtml(row){
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
-  el.innerHTML=tp.map((p)=>{
-    const gi=players.indexOf(p); // global index for delete
-    const d=DISC[p.yrs]||0;
-    const cap=(p.sal*(1-d)).toFixed(1);
-    const av=avMap.get(p.name.toLowerCase());
-    const targetCell=av
-      ?`<span class="player-cell" style="color:var(--blue);">$${av.auction_value}</span>`
-      :`<span class="player-cell ou-none">—</span>`;
-    return `<div class="player-row-item">
-      <span class="player-name-cell">${p.name}</span>
-      <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
-      <span class="player-cell">${p.age}</span>
-      <span class="player-cell bold">$${p.sal}</span>
-      ${targetCell}
-      <span class="player-cell">${ouBadge(p.sal,av)}</span>
-      <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
-      <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
-      <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+  if(!row.player){
+    return `<div class="roster-row empty">
+      <span class="roster-slot-label">${row.label}</span>
+      <span class="player-name-cell" style="color:var(--text3);">— Empty —</span>
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
     </div>`;
-  }).join('');
+  }
+  const p=row.player;
+  const gi=players.indexOf(p); // global index for delete
+  const d=DISC[p.yrs]||0;
+  const cap=(p.sal*(1-d)).toFixed(1);
+  const av=avMap.get(p.name.toLowerCase());
+  const targetCell=av
+    ?`<span class="player-cell" style="color:var(--blue);">$${av.auction_value}</span>`
+    :`<span class="player-cell ou-none">—</span>`;
+  return `<div class="roster-row">
+    <span class="roster-slot-label">${row.label}</span>
+    <span class="player-name-cell">${p.name}</span>
+    <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
+    <span class="player-cell">${p.age}</span>
+    <span class="player-cell bold">$${p.sal}</span>
+    ${targetCell}
+    <span class="player-cell">${ouBadge(p.sal,av)}</span>
+    <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
+    <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
+    <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>`;
+}
+
+function renderPlayers(){
+  const startersEl=document.getElementById('starters-list');
+  const benchEl=document.getElementById('bench-list');
+  if(!startersEl||!benchEl) return;
+  const tp=viewedPicks();
+  const {starters,benchRows}=assignRosterSlots(tp);
+  startersEl.innerHTML=starters.map(buildRosterRowHtml).join('');
+  benchEl.innerHTML=benchRows.map(buildRosterRowHtml).join('');
 }
 
 
