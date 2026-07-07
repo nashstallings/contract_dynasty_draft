@@ -1390,14 +1390,16 @@ function renderCapBreakdown(){
   // of cap/contract impact from bids still in progress. Netted into
   // "Available" below (not just shown alongside it), so Available reflects
   // what you'd actually have left if every active bid you're holding wins.
+  // Unlike committed picks above, this does NOT apply the multi-year discount
+  // to the bid — a nomination's bid hasn't been locked into a signed contract
+  // yet, so it escalates at full value until it actually converts to a pick.
   const activeNoms=nominations.filter(n=>(n.owner||MY_TEAM)===viewedTeam);
   const activeCommitted=[0,0,0,0];
   const activeLenCounts={1:0,2:0,3:0,4:0};
   activeNoms.forEach(n=>{
     const bid=parseFloat(n.bid)||0;
     const yrs=n.yrs||1;
-    const d=DISC[yrs]||0;
-    const base=bid*(1-d);
+    const base=bid;
     activeLenCounts[yrs]=(activeLenCounts[yrs]||0)+1;
     for(let k=0;k<yrs && k<SEASONS.length;k++){
       activeCommitted[k]+=base*Math.pow(1+ESCALATION,k);
