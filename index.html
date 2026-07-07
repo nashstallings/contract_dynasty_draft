@@ -1386,18 +1386,10 @@ function renderCapBreakdown(){
       committed[k]+=base*Math.pow(1+ESCALATION,k);
     }
   });
-  const available=committed.map(c=>SEASON_CAP-c);
-
-  // Contract slots remaining per length
-  const contractsAvail={
-    2:CONTRACT_LIMITS[2]-(lenCounts[2]||0),
-    3:CONTRACT_LIMITS[3]-(lenCounts[3]||0),
-    4:CONTRACT_LIMITS[4]-(lenCounts[4]||0),
-  };
-
   // Active nominations currently assigned to the viewed team — a live preview
-  // of cap/contract impact from bids still in progress, shown alongside (not
-  // netted into) the actual committed "Available" figures below.
+  // of cap/contract impact from bids still in progress. Netted into
+  // "Available" below (not just shown alongside it), so Available reflects
+  // what you'd actually have left if every active bid you're holding wins.
   const activeNoms=nominations.filter(n=>(n.owner||MY_TEAM)===viewedTeam);
   const activeCommitted=[0,0,0,0];
   const activeLenCounts={1:0,2:0,3:0,4:0};
@@ -1411,6 +1403,16 @@ function renderCapBreakdown(){
       activeCommitted[k]+=base*Math.pow(1+ESCALATION,k);
     }
   });
+
+  const available=committed.map((c,i)=>SEASON_CAP-c-activeCommitted[i]);
+
+  // Contract slots remaining per length. 1-year contracts are always
+  // unlimited — no CONTRACT_LIMITS entry for length 1, by design.
+  const contractsAvail={
+    2:CONTRACT_LIMITS[2]-(lenCounts[2]||0)-(activeLenCounts[2]||0),
+    3:CONTRACT_LIMITS[3]-(lenCounts[3]||0)-(activeLenCounts[3]||0),
+    4:CONTRACT_LIMITS[4]-(lenCounts[4]||0)-(activeLenCounts[4]||0),
+  };
 
   const capClass=v=>v<0?'neg':v<=SEASON_CAP*0.15?'tight':'pos';
   const ctClass =v=>v<0?'neg':v===0?'tight':'pos';
