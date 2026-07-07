@@ -682,10 +682,11 @@ const CONTRACT_LIMITS={2:4,3:3,4:2};  // max contracts allowed per length (1yr u
 // auction_value lands within 10% of any unfilled slot band for a needed group.
 // Strategy: ~3 stars (anchor RB + top QB + strong WR), punt TE, cheap depth.
 const SPEND_PLAN={
-  QB:{ label:'QB (incl. SFLX)', budget:75, slots:[[52,73],[10,20]] },
-  RB:{ label:'RB (incl. FLEX)', budget:80, slots:[[55,76],[8,18],[3,10]] },
-  WR:{ label:'WR (incl. FLEX)', budget:70, slots:[[42,58],[18,30],[6,15],[2,8]] },
-  TE:{ label:'TE (punt)',       budget:8,  slots:[[2,16]] },
+  QB:  { label:'QB (incl. SFLX)', budget:75, slots:[[52,73],[10,20]],        elig:['QB'] },
+  RB:  { label:'RB',              budget:72, slots:[[55,76],[8,18]],        elig:['RB'] },
+  WR:  { label:'WR',              budget:65, slots:[[42,58],[18,30],[6,15]],elig:['WR'] },
+  FLEX:{ label:'FLEX',            budget:13, slots:[[3,10],[2,8]],          elig:['RB','WR','TE'] },
+  TE:  { label:'TE (punt)',       budget:8,  slots:[[2,16]],                elig:['TE'] },
 };
 const BENCH_BUDGET=17;   // top-15 bench: mostly $1-3 dart throws
 const PLAN_BANDS_PCT=0.10;  // ±10% tolerance on slot bands for the Targets filter
@@ -1446,23 +1447,35 @@ function renderCapBreakdown(){
 }
 
 // Compute per-group spend vs. plan for a set of picks. Bench = anything beyond
-// the planned starter slot count for each group.
+// the planned starter slot count for each group. Position-exclusive groups
+// (QB/RB/WR/TE) fill from their own picks first, priciest first; FLEX then
+// draws from whatever RB/WR/TE picks are left over, also priciest first —
+// matching how a real roster would actually slot its most valuable players.
 function computeSpendVsPlan(picks){
   const groups={};
   let benchSpent=0;
-  const STARTER_SLOTS={QB:2,RB:3,WR:4,TE:1};  // matches SPEND_PLAN slot counts
   Object.keys(SPEND_PLAN).forEach(g=>{ groups[g]={spent:0,count:0,budget:SPEND_PLAN[g].budget}; });
 
-  // Sort each position's picks by salary desc so the priciest fill starter slots first
-  ['QB','RB','WR','TE'].forEach(pos=>{
-    const pp=picks.filter(p=>p.pos===pos).sort((a,b)=>b.sal-a.sal);
-    pp.forEach((p,idx)=>{
-      if(idx < STARTER_SLOTS[pos]){ groups[pos].spent+=p.sal; groups[pos].count++; }
-      else { benchSpent+=p.sal; }
+  const used=new Set();
+  Object.keys(SPEND_PLAN).forEach(g=>{
+    const plan=SPEND_PLAN[g];
+    if(!plan.elig || plan.elig.length!==1) return; // handle single-position groups here; FLEX is multi-elig
+    const pos=plan.elig[0];
+    const need=plan.slots.length;
+    picks.filter(p=>p.pos===pos).sort((a,b)=>b.sal-a.sal).forEach((p,idx)=>{
+      if(idx<need){ groups[g].spent+=p.sal; groups[g].count++; used.add(p); }
     });
   });
-  // Any other positions (none expected) roll into bench
-  picks.filter(p=>!STARTER_SLOTS[p.pos]).forEach(p=>{ benchSpent+=p.sal; });
+
+  if(SPEND_PLAN.FLEX){
+    const flexElig=SPEND_PLAN.FLEX.elig;
+    const need=SPEND_PLAN.FLEX.slots.length;
+    picks.filter(p=>flexElig.includes(p.pos) && !used.has(p)).sort((a,b)=>b.sal-a.sal).forEach((p,idx)=>{
+      if(idx<need){ groups.FLEX.spent+=p.sal; groups.FLEX.count++; used.add(p); }
+    });
+  }
+
+  picks.forEach(p=>{ if(!used.has(p)) benchSpent+=p.sal; });
 
   return { groups, benchSpent };
 }
@@ -1476,7 +1489,7 @@ function renderSpendPlan(){
 
   const tp=viewedPicks();
   const { groups, benchSpent }=computeSpendVsPlan(tp);
-  const gcol={QB:'#3B82F6',RB:'#F5A623',WR:'#00C97A',TE:'#E879B0'};
+  const gcol={QB:'#3B82F6',RB:'#F5A623',WR:'#00C97A',FLEX:'#A78BFA',TE:'#E879B0'};
 
   const plannedTotal=Object.values(SPEND_PLAN).reduce((s,g)=>s+g.budget,0)+BENCH_BUDGET;
   const spentTotal=tp.reduce((s,p)=>s+p.sal,0);
@@ -2017,19 +2030,25 @@ function computeTargets(picks) {
   const context = { have, remaining, totalSpent: spent, avgBid, picks: myPicks };
 
   // ── Plan-fit: which slot bands are still open per group ──────────────────
-  // Match my existing picks to their group's slots (priciest first), leaving the
-  // unfilled slot bands. A candidate "fits the plan" if its value is within ±10%
-  // of any open band in its group. Cheap bench-range players (<=$10) always pass.
+  // Reuse the same fill logic as the Spending Plan display (computeSpendVsPlan)
+  // so "how many slots are filled" agrees exactly with what's shown there —
+  // including FLEX, which draws from leftover RB/WR/TE picks rather than being
+  // tied to one position. A candidate "fits the plan" if its value is within
+  // ±10% of any open band in its own group, or (for RB/WR/TE) the FLEX group.
+  // Cheap bench-range players (<=$10) always pass.
+  const { groups: myGroupFit } = computeSpendVsPlan(myPicks);
   const openBands = {};
   Object.keys(SPEND_PLAN).forEach(g => {
     const slots = SPEND_PLAN[g].slots.map(b => b.slice()); // clone [lo,hi] pairs
-    const filledCount = myPicks.filter(p => p.pos === g).length;
+    const filledCount = myGroupFit[g]?.count || 0;
     openBands[g] = slots.slice(filledCount); // remaining slots after what's filled
   });
   function fitsPlan(r) {
     if (r.auction_value <= 10) return true;            // bench/stash money is reserved separately
-    const bands = openBands[r.position];
-    if (!bands || !bands.length) return false;          // group's planned slots are full
+    const groupsToCheck = [r.position];
+    if (SPEND_PLAN.FLEX?.elig.includes(r.position)) groupsToCheck.push('FLEX');
+    const bands = groupsToCheck.flatMap(g => openBands[g] || []);
+    if (!bands.length) return false;                    // group's (and FLEX's) planned slots are full
     return bands.some(([lo, hi]) =>
       r.auction_value >= lo * (1 - PLAN_BANDS_PCT) &&
       r.auction_value <= hi * (1 + PLAN_BANDS_PCT));
