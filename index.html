@@ -831,6 +831,9 @@ const NOM_POLL_MS=5000;
 let selectedNomAddPlayer=null;
 let nomAddActiveIdx=-1;
 const nomPushTimers={};
+const nomPushChains={};     // id -> promise chain, so pushes for one nomination never overlap
+const nomLastLocalEditAt={}; // id -> timestamp of the last local field edit, guards against poll clobber
+const NOM_LOCAL_EDIT_GUARD_MS=3000;
 
 // Nominations live in BigQuery (via the same Cloud Run proxy as picks) so the
 // board is shared across every device pointed at this app, not just one browser.
@@ -881,14 +884,24 @@ async function pollNominations(){
 // mid-keystroke — and a bid you're actively typing is never overwritten.
 function mergeRemoteNominations(rows){
   const serverIds=new Set(rows.map(r=>r.nomination_id));
+  const isRecentlyEdited=id=>(Date.now()-(nomLastLocalEditAt[id]||0))<NOM_LOCAL_EDIT_GUARD_MS;
+
+  // Keep a nomination the poll doesn't know about yet if we just created/edited
+  // it locally — its push may still be in flight. Only drop it once the guard
+  // window passes without the server ever picking it up (or it's genuinely gone).
   const before=nominations.length;
-  nominations=nominations.filter(n=>serverIds.has(n.id));
+  nominations=nominations.filter(n=>serverIds.has(n.id)||isRecentlyEdited(n.id));
   let structural=nominations.length!==before;
 
   const toAdd=[];
   rows.forEach(row=>{
     const existing=nominations.find(n=>n.id===row.nomination_id);
     if(!existing){ toAdd.push(remoteRowToNomination(row)); return; }
+
+    // Never let a poll clobber a field we edited moments ago — our own pending
+    // push (possibly still queued behind an earlier one) is the source of
+    // truth until it lands, not whatever the server had at poll time.
+    if(isRecentlyEdited(existing.id)) return;
 
     const bidEl=document.getElementById('nom-bid-'+existing.id);
     const bidFocused=document.activeElement===bidEl;
@@ -938,12 +951,22 @@ async function pushNomination(nom){
   }catch(err){ console.error('Nomination push failed:',err); }
 }
 
+// Serialize pushes per nomination so rapid edits (bid debounce + an immediate
+// owner/contract change) can never complete out of order over the network and
+// clobber each other — each queued push re-reads the nomination's current
+// state right before sending, rather than a stale value captured earlier.
+function enqueuePushNomination(id){
+  const run=async()=>{
+    const nom=nominations.find(n=>n.id===id);
+    if(nom) await pushNomination(nom);
+  };
+  const prev=nomPushChains[id]||Promise.resolve();
+  nomPushChains[id]=prev.then(run,run);
+}
+
 function schedulePushNomination(id){
   clearTimeout(nomPushTimers[id]);
-  nomPushTimers[id]=setTimeout(()=>{
-    const nom=nominations.find(n=>n.id===id);
-    if(nom) pushNomination(nom);
-  },400);
+  nomPushTimers[id]=setTimeout(()=>enqueuePushNomination(id),400);
 }
 
 async function deleteNominationRemote(id){
@@ -1034,13 +1057,14 @@ function addNomination(){
 
   const nom={id:crypto.randomUUID(),player:p,bid,owner,yrs};
   nominations.push(nom);
+  nomLastLocalEditAt[nom.id]=Date.now();
   document.getElementById('nom-add-pn').value='';
   if(bidInput) bidInput.value='';
   if(yrsSelect) yrsSelect.value='1';
   if(ownerSelect) ownerSelect.value=MY_TEAM;
   selectedNomAddPlayer=null;
   renderNominations();
-  pushNomination(nom);
+  enqueuePushNomination(nom.id);
 }
 
 function removeNomination(id){
@@ -1053,6 +1077,7 @@ function onNomBidInput(id,val){
   const nom=nominations.find(n=>n.id===id);
   if(!nom)return;
   nom.bid=val;
+  nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
   schedulePushNomination(id);
 }
@@ -1061,15 +1086,17 @@ function onNomOwnerChange(id,val){
   const nom=nominations.find(n=>n.id===id);
   if(!nom)return;
   nom.owner=val;
+  nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
-  pushNomination(nom);
+  enqueuePushNomination(id);
 }
 
 function onNomYrsChange(id,val){
   const nom=nominations.find(n=>n.id===id);
   if(!nom)return;
   nom.yrs=parseInt(val)||1;
-  pushNomination(nom);
+  nomLastLocalEditAt[id]=Date.now();
+  enqueuePushNomination(id);
 }
 
 // Confirm the nomination as won — this is the only path a pick is logged.
