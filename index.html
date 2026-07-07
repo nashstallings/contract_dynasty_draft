@@ -176,8 +176,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .td-item-val{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--green);width:32px;text-align:right;flex-shrink:0;}
 .td-empty{padding:12px 14px;font-size:12px;color:var(--text3);text-align:center;}
 .form-row-new{display:grid;grid-template-columns:1fr 90px 130px 150px auto;gap:10px;align-items:end;}
-.form-row-new select#powner{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-body);font-size:13px;padding:9px 12px;border-radius:7px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A90AE' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;cursor:pointer;}
-.form-row-new select#powner:focus{border-color:var(--green);}
 .team-selector-bar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
 .team-selector-label{font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);}
 #team-selector{background:var(--card2);border:1px solid var(--border2);color:var(--text);font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:.5px;padding:8px 36px 8px 14px;border-radius:8px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A90AE' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer;transition:border-color .15s;}
@@ -344,9 +342,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
   .bmet:nth-last-child(-n+2){border-bottom:none;padding-bottom:0;}
   .bmet-value{font-size:20px;}
   .add-form-card{padding:14px;margin-bottom:14px;}
-  .form-row-new{grid-template-columns:1fr 1fr;gap:10px;}
-  .form-row-new .fg:first-child{grid-column:1/-1;}
-  .form-row-new .fg:last-child{grid-column:1/-1;}
+  .form-row-new{grid-template-columns:1fr;gap:10px;}
   .add-btn{width:100%;padding:12px;font-size:15px;}
   /* collapse draft history: hide age and contract, keep team/name/pos/salary/cap/del */
   .hist-list-header{grid-template-columns:70px 1fr 40px 56px 68px 28px;padding:8px 12px;font-size:9px;}
@@ -465,13 +461,20 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
          logs the pick directly, no separate "log a pick" form. -->
     <div class="add-form-card" id="nom-card">
       <div class="form-title">Nominations Board <span style="font-family:var(--font-mono);font-size:11px;font-weight:400;letter-spacing:.5px;color:var(--text3);margin-left:8px;text-transform:none;" id="nom-count">0 / 20 on the block</span></div>
-      <div class="form-row-new" style="grid-template-columns:1fr auto;">
+      <div class="form-row-new">
         <div class="fg">
           <label>Nominate a player</label>
           <div class="player-search-wrap">
             <input type="text" id="nom-add-pn" placeholder="Search by name…" autocomplete="off" oninput="onNomAddSearch(this.value)" onkeydown="onNomAddKey(event)"/>
             <div class="typeahead-dropdown" id="nom-add-td"></div>
           </div>
+        </div>
+        <div class="fg"><label>Bid $</label><input type="number" id="nom-add-bid" min="0" placeholder="0" onkeydown="if(event.key==='Enter')addNomination();"/></div>
+        <div class="fg"><label>Contract</label>
+          <select id="nom-add-yrs"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
+        </div>
+        <div class="fg"><label>Won by</label>
+          <select id="nom-add-owner"></select>
         </div>
         <div class="fg"><label>&nbsp;</label><button class="add-btn" onclick="addNomination()">+ Nominate</button></div>
       </div>
@@ -1021,9 +1024,20 @@ function addNomination(){
   if(nominations.length>=MAX_NOMINATIONS){alert(`Max ${MAX_NOMINATIONS} concurrent nominations.`);return;}
   const p=selectedNomAddPlayer;
   if(alreadyOnBlockOrDrafted(p.display_name)) return;
-  const nom={id:crypto.randomUUID(),player:p,bid:'',owner:MY_TEAM,yrs:1};
+
+  const bidInput=document.getElementById('nom-add-bid');
+  const yrsSelect=document.getElementById('nom-add-yrs');
+  const ownerSelect=document.getElementById('nom-add-owner');
+  const bid=bidInput&&bidInput.value!==''?bidInput.value:'';
+  const yrs=yrsSelect?parseInt(yrsSelect.value)||1:1;
+  const owner=ownerSelect&&ownerSelect.value?ownerSelect.value:MY_TEAM;
+
+  const nom={id:crypto.randomUUID(),player:p,bid,owner,yrs};
   nominations.push(nom);
   document.getElementById('nom-add-pn').value='';
+  if(bidInput) bidInput.value='';
+  if(yrsSelect) yrsSelect.value='1';
+  if(ownerSelect) ownerSelect.value=MY_TEAM;
   selectedNomAddPlayer=null;
   renderNominations();
   pushNomination(nom);
@@ -1265,6 +1279,10 @@ function buildTeamDropdowns(){
   if(teamSel){
     teamSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===viewedTeam?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
     teamSel.classList.toggle('is-me',viewedTeam===MY_TEAM);
+  }
+  const nomOwnerSel=document.getElementById('nom-add-owner');
+  if(nomOwnerSel){
+    nomOwnerSel.innerHTML=TEAMS.map(t=>`<option value="${t}"${t===MY_TEAM?' selected':''}>${t}${t===MY_TEAM?' (you)':''}</option>`).join('');
   }
 }
 
