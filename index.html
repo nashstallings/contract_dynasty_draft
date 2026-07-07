@@ -893,6 +893,7 @@ function mergeRemoteNominations(rows){
   nominations=nominations.filter(n=>serverIds.has(n.id)||isRecentlyEdited(n.id));
   let structural=nominations.length!==before;
 
+  let fieldChanged=false;
   const toAdd=[];
   rows.forEach(row=>{
     const existing=nominations.find(n=>n.id===row.nomination_id);
@@ -910,6 +911,7 @@ function mergeRemoteNominations(rows){
       existing.bid=remoteBid;
       if(bidEl) bidEl.value=remoteBid;
       updateNomRowVerdict(existing.id);
+      fieldChanged=true;
     }
 
     const remoteOwner=row.owner||MY_TEAM;
@@ -918,6 +920,7 @@ function mergeRemoteNominations(rows){
       const selects=document.querySelectorAll(`#nom-row-${existing.id} select`);
       if(selects[0]) selects[0].value=remoteOwner;
       updateNomRowVerdict(existing.id);
+      fieldChanged=true;
     }
 
     const remoteYrs=parseInt(row.contract_yrs)||1;
@@ -925,11 +928,13 @@ function mergeRemoteNominations(rows){
       existing.yrs=remoteYrs;
       const selects=document.querySelectorAll(`#nom-row-${existing.id} select`);
       if(selects[1]) selects[1].value=String(remoteYrs);
+      fieldChanged=true;
     }
   });
 
   if(toAdd.length){ nominations.push(...toAdd); structural=true; }
   if(structural) renderNominations();
+  if(structural||fieldChanged) renderCapBreakdown();
 }
 
 async function pushNomination(nom){
@@ -1064,12 +1069,14 @@ function addNomination(){
   if(ownerSelect) ownerSelect.value=MY_TEAM;
   selectedNomAddPlayer=null;
   renderNominations();
+  renderCapBreakdown();
   enqueuePushNomination(nom.id);
 }
 
 function removeNomination(id){
   nominations=nominations.filter(n=>n.id!==id);
   renderNominations();
+  renderCapBreakdown();
   deleteNominationRemote(id);
 }
 
@@ -1079,6 +1086,7 @@ function onNomBidInput(id,val){
   nom.bid=val;
   nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
+  renderCapBreakdown();
   schedulePushNomination(id);
 }
 
@@ -1088,6 +1096,7 @@ function onNomOwnerChange(id,val){
   nom.owner=val;
   nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
+  renderCapBreakdown();
   enqueuePushNomination(id);
 }
 
@@ -1096,6 +1105,7 @@ function onNomYrsChange(id,val){
   if(!nom)return;
   nom.yrs=parseInt(val)||1;
   nomLastLocalEditAt[id]=Date.now();
+  renderCapBreakdown();
   enqueuePushNomination(id);
 }
 
@@ -1110,7 +1120,7 @@ async function winNomination(id){
   const p=nom.player;
   if(players.some(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase())){
     alert(`${p.display_name} is already drafted.`);
-    nominations=nominations.filter(n=>n.id!==id);renderNominations();deleteNominationRemote(id);return;
+    nominations=nominations.filter(n=>n.id!==id);renderNominations();renderCapBreakdown();deleteNominationRemote(id);return;
   }
   const ownerSpent=players.filter(pl=>(pl.owner||MY_TEAM)===owner).reduce((s,pl)=>s+pl.sal,0);
   if(ownerSpent+bid>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
@@ -1385,6 +1395,23 @@ function renderCapBreakdown(){
     4:CONTRACT_LIMITS[4]-(lenCounts[4]||0),
   };
 
+  // Active nominations currently assigned to the viewed team — a live preview
+  // of cap/contract impact from bids still in progress, shown alongside (not
+  // netted into) the actual committed "Available" figures below.
+  const activeNoms=nominations.filter(n=>(n.owner||MY_TEAM)===viewedTeam);
+  const activeCommitted=[0,0,0,0];
+  const activeLenCounts={1:0,2:0,3:0,4:0};
+  activeNoms.forEach(n=>{
+    const bid=parseFloat(n.bid)||0;
+    const yrs=n.yrs||1;
+    const d=DISC[yrs]||0;
+    const base=bid*(1-d);
+    activeLenCounts[yrs]=(activeLenCounts[yrs]||0)+1;
+    for(let k=0;k<yrs && k<SEASONS.length;k++){
+      activeCommitted[k]+=base*Math.pow(1+ESCALATION,k);
+    }
+  });
+
   const capClass=v=>v<0?'neg':v<=SEASON_CAP*0.15?'tight':'pos';
   const ctClass =v=>v<0?'neg':v===0?'tight':'pos';
 
@@ -1392,6 +1419,8 @@ function renderCapBreakdown(){
     <div class="cb-section">
       <div class="cb-title">Cap Space</div>
       ${SEASONS.map(y=>`<div class="cb-col-head">'${String(y).slice(2)}</div>`).join('')}
+      <div class="cb-row-label">Active High Bids</div>
+      ${activeCommitted.map(v=>`<div class="cb-val pos">$${Math.round(v)}</div>`).join('')}
       <div class="cb-row-label">Available</div>
       ${available.map(v=>`<div class="cb-val ${capClass(v)}">$${Math.round(v)}</div>`).join('')}
     </div>
@@ -1399,6 +1428,11 @@ function renderCapBreakdown(){
       <div class="cb-title">Contracts</div>
       <div class="cb-col-head">1y</div><div class="cb-col-head">2y</div>
       <div class="cb-col-head">3y</div><div class="cb-col-head">4y</div>
+      <div class="cb-row-label">Active High Bids</div>
+      <div class="cb-val pos">${activeLenCounts[1]}</div>
+      <div class="cb-val pos">${activeLenCounts[2]}</div>
+      <div class="cb-val pos">${activeLenCounts[3]}</div>
+      <div class="cb-val pos">${activeLenCounts[4]}</div>
       <div class="cb-row-label">Available</div>
       <div class="cb-val muted">–</div>
       <div class="cb-val ${ctClass(contractsAvail[2])}">${contractsAvail[2]}</div>
