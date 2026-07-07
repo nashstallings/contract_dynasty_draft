@@ -691,7 +691,7 @@ const CONTRACT_LIMITS={2:4,3:3,4:2};  // max contracts allowed per length (1yr u
 const SPEND_PLAN={
   QB:  { label:'QB (incl. SFLX)', budget:75, slots:[[52,73],[10,20]],        elig:['QB'] },
   RB:  { label:'RB',              budget:72, slots:[[55,76],[8,18]],        elig:['RB'] },
-  WR:  { label:'WR',              budget:65, slots:[[42,58],[18,30],[6,15]],elig:['WR'] },
+  WR:  { label:'WR',              budget:65, slots:[[32,44],[14,24],[5,12]],elig:['WR'] },
   FLEX:{ label:'FLEX',            budget:13, slots:[[3,10],[2,8]],          elig:['RB','WR','TE'] },
   TE:  { label:'TE (punt)',       budget:8,  slots:[[2,16]],                elig:['TE'] },
 };
@@ -1360,7 +1360,7 @@ function updBudget(){
   document.getElementById('bbar').style.width=pct+'%';
   document.getElementById('bbar').style.background=col;
   document.getElementById('blbl').textContent='$'+rem+' remaining';
-  const more=Math.max(1,36-tp.length);
+  const more=Math.max(1,ROSTER_TOTAL_SPOTS-tp.length);
   const avg=tp.length?Math.round(spent/tp.length):0;
   document.getElementById('bmet').innerHTML=`
     <div class="bmet"><div class="bmet-label">Remaining</div><div class="bmet-value" style="color:${col}">$${rem}</div><div class="bmet-sub">of $250 budget</div></div>
@@ -1705,6 +1705,7 @@ const ROSTER_STARTER_SLOTS=[
   {label:'SFLX',elig:['QB','RB','WR','TE']},
 ];
 const ROSTER_BENCH_COUNT=15;
+const ROSTER_TOTAL_SPOTS=ROSTER_STARTER_SLOTS.length+ROSTER_BENCH_COUNT; // 10 starters + 15 bench = 25
 
 // Greedy display heuristic — highest-salary players claim strict slots first,
 // then FLEX/SFLX, then whatever's left fills bench. We don't track a real
@@ -2080,9 +2081,9 @@ function computeTargets(picks) {
   const have = { QB:0, RB:0, WR:0, TE:0 };
   myPicks.forEach(p => { if (have[p.pos] !== undefined) have[p.pos]++; });
 
-  // How many roster spots left on my team (target 36)
+  // How many roster spots left on my team (target ROSTER_TOTAL_SPOTS)
   const totalDrafted  = myPicks.length;
-  const slotsLeft     = Math.max(1, 36 - totalDrafted);
+  const slotsLeft     = Math.max(1, ROSTER_TOTAL_SPOTS - totalDrafted);
   const avgBid        = remaining / slotsLeft;
 
   const context = { have, remaining, totalSpent: spent, avgBid, picks: myPicks };
@@ -2295,7 +2296,7 @@ function paintTargets(result, livePicks) {
   // ── Roster snapshot ───────────────────────────────────────────────────────
   const posColors = { QB:'#3B82F6', RB:'#F5A623', WR:'#00C97A', TE:'#E879B0' };
   const posLabels = { QB:'QBs', RB:'RBs', WR:'WRs', TE:'TEs' };
-  const slotsLeft = Math.max(1, 36 - totalDrafted);
+  const slotsLeft = Math.max(1, ROSTER_TOTAL_SPOTS - totalDrafted);
   const avgDisplay = remaining > 0 ? '$' + Math.round(avgBid) : '—';
 
   document.getElementById('tgt-roster-block').innerHTML =
