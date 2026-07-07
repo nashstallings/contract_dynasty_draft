@@ -151,6 +151,9 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 .roster-row:hover{background:var(--card2);}
 .roster-row.empty{opacity:.55;}
 .roster-slot-label{font-family:var(--font-head);font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--text3);text-transform:uppercase;}
+.roster-row.pending{background:var(--amber-dim);}
+.roster-row.pending:hover{background:#F5A62330;}
+.roster-pending-badge{font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.5px;color:var(--amber);background:#F5A62322;border:1px solid #F5A62344;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
 /* over/under badge */
 .ou-badge{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;white-space:nowrap;}
 .ou-over{background:#F04D4D22;color:#F07070;}
@@ -488,6 +491,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     <div class="team-selector-bar">
       <label class="team-selector-label">Viewing roster</label>
       <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
+      <div class="board-toggle">
+        <button class="board-toggle-btn on" id="rbt-drafted" onclick="setRosterActiveBids(false)">Drafted</button>
+        <button class="board-toggle-btn" id="rbt-bids" onclick="setRosterActiveBids(true)">+ High Bids</button>
+      </div>
       <div class="team-selector-spacer"></div>
       <div class="team-league-summary" id="team-league-summary"></div>
     </div>
@@ -935,7 +942,7 @@ function mergeRemoteNominations(rows){
 
   if(toAdd.length){ nominations.push(...toAdd); structural=true; }
   if(structural) renderNominations();
-  if(structural||fieldChanged) renderCapBreakdown();
+  if(structural||fieldChanged){ renderCapBreakdown(); if(rosterShowActiveBids) renderPlayers(); }
 }
 
 async function pushNomination(nom){
@@ -1071,6 +1078,7 @@ function addNomination(){
   selectedNomAddPlayer=null;
   renderNominations();
   renderCapBreakdown();
+  if(rosterShowActiveBids) renderPlayers();
   enqueuePushNomination(nom.id);
 }
 
@@ -1078,6 +1086,7 @@ function removeNomination(id){
   nominations=nominations.filter(n=>n.id!==id);
   renderNominations();
   renderCapBreakdown();
+  if(rosterShowActiveBids) renderPlayers();
   deleteNominationRemote(id);
 }
 
@@ -1088,6 +1097,7 @@ function onNomBidInput(id,val){
   nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
   renderCapBreakdown();
+  if(rosterShowActiveBids) renderPlayers();
   schedulePushNomination(id);
 }
 
@@ -1098,6 +1108,7 @@ function onNomOwnerChange(id,val){
   nomLastLocalEditAt[id]=Date.now();
   updateNomRowVerdict(id);
   renderCapBreakdown();
+  if(rosterShowActiveBids) renderPlayers();
   enqueuePushNomination(id);
 }
 
@@ -1107,6 +1118,7 @@ function onNomYrsChange(id,val){
   nom.yrs=parseInt(val)||1;
   nomLastLocalEditAt[id]=Date.now();
   renderCapBreakdown();
+  if(rosterShowActiveBids) renderPlayers();
   enqueuePushNomination(id);
 }
 
@@ -1121,7 +1133,7 @@ async function winNomination(id){
   const p=nom.player;
   if(players.some(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase())){
     alert(`${p.display_name} is already drafted.`);
-    nominations=nominations.filter(n=>n.id!==id);renderNominations();renderCapBreakdown();deleteNominationRemote(id);return;
+    nominations=nominations.filter(n=>n.id!==id);renderNominations();renderCapBreakdown();if(rosterShowActiveBids)renderPlayers();deleteNominationRemote(id);return;
   }
   const ownerSpent=players.filter(pl=>(pl.owner||MY_TEAM)===owner).reduce((s,pl)=>s+pl.sal,0);
   if(ownerSpent+bid>250){alert(`Over budget! ${owner} only has $${250-ownerSpent} remaining.`);return;}
@@ -1704,16 +1716,19 @@ function buildRosterRowHtml(row){
     </div>`;
   }
   const p=row.player;
-  const gi=players.indexOf(p); // global index for delete
+  const isPending=!!p.pending;
+  const gi=isPending?-1:players.indexOf(p); // global index for delete (real picks only)
   const d=DISC[p.yrs]||0;
   const cap=(p.sal*(1-d)).toFixed(1);
   const av=avMap.get(p.name.toLowerCase());
   const targetCell=av
     ?`<span class="player-cell" style="color:var(--blue);">$${av.auction_value}</span>`
     :`<span class="player-cell ou-none">—</span>`;
-  return `<div class="roster-row">
+  const delAction=isPending?`removeNomination('${p.nomId}')`:`delP(${gi})`;
+  const delLabel=isPending?'Remove nomination':'Remove player';
+  return `<div class="roster-row${isPending?' pending':''}">
     <span class="roster-slot-label">${row.label}</span>
-    <span class="player-name-cell">${p.name}</span>
+    <span class="player-name-cell">${p.name}${isPending?'<span class="roster-pending-badge">BID</span>':''}</span>
     <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
     <span class="player-cell">${p.age}</span>
     <span class="player-cell bold">$${p.sal}</span>
@@ -1721,17 +1736,37 @@ function buildRosterRowHtml(row){
     <span class="player-cell">${ouBadge(p.sal,av)}</span>
     <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
     <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
-    <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
+    <button class="del-btn" onclick="${delAction}" aria-label="${delLabel}">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>`;
+}
+
+let rosterShowActiveBids=false;
+
+function setRosterActiveBids(show){
+  rosterShowActiveBids=show;
+  const draftedBtn=document.getElementById('rbt-drafted');
+  const bidsBtn=document.getElementById('rbt-bids');
+  if(draftedBtn) draftedBtn.classList.toggle('on',!show);
+  if(bidsBtn) bidsBtn.classList.toggle('on',show);
+  renderPlayers();
 }
 
 function renderPlayers(){
   const startersEl=document.getElementById('starters-list');
   const benchEl=document.getElementById('bench-list');
   if(!startersEl||!benchEl) return;
-  const tp=viewedPicks();
+  let tp=viewedPicks(); // real picks — keep references intact so players.indexOf(p) still works
+  if(rosterShowActiveBids){
+    const pendingPicks=nominations
+      .filter(n=>(n.owner||MY_TEAM)===viewedTeam)
+      .map(n=>({
+        nomId:n.id, owner:n.owner, name:n.player.display_name, pos:n.player.position,
+        age:n.player.age, sal:parseFloat(n.bid)||0, yrs:n.yrs||1, pending:true,
+      }));
+    tp=tp.concat(pendingPicks);
+  }
   const {starters,benchRows}=assignRosterSlots(tp);
   startersEl.innerHTML=starters.map(buildRosterRowHtml).join('');
   benchEl.innerHTML=benchRows.map(buildRosterRowHtml).join('');
