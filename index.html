@@ -1465,8 +1465,14 @@ function renderCapBreakdown(){
 // matching how a real roster would actually slot its most valuable players.
 function computeSpendVsPlan(picks){
   const groups={};
-  let benchSpent=0;
-  Object.keys(SPEND_PLAN).forEach(g=>{ groups[g]={spent:0,count:0,budget:SPEND_PLAN[g].budget}; });
+  let benchSpent=0, benchDrafted=0, benchPending=0;
+  Object.keys(SPEND_PLAN).forEach(g=>{ groups[g]={spent:0,drafted:0,pending:0,count:0,budget:SPEND_PLAN[g].budget}; });
+
+  const addToGroup=(g,p)=>{
+    groups[g].spent+=p.sal;
+    if(p.pending) groups[g].pending+=p.sal; else groups[g].drafted+=p.sal;
+    groups[g].count++;
+  };
 
   const used=new Set();
   Object.keys(SPEND_PLAN).forEach(g=>{
@@ -1475,7 +1481,7 @@ function computeSpendVsPlan(picks){
     const pos=plan.elig[0];
     const need=plan.slots.length;
     picks.filter(p=>p.pos===pos).sort((a,b)=>b.sal-a.sal).forEach((p,idx)=>{
-      if(idx<need){ groups[g].spent+=p.sal; groups[g].count++; used.add(p); }
+      if(idx<need){ addToGroup(g,p); used.add(p); }
     });
   });
 
@@ -1483,13 +1489,18 @@ function computeSpendVsPlan(picks){
     const flexElig=SPEND_PLAN.FLEX.elig;
     const need=SPEND_PLAN.FLEX.slots.length;
     picks.filter(p=>flexElig.includes(p.pos) && !used.has(p)).sort((a,b)=>b.sal-a.sal).forEach((p,idx)=>{
-      if(idx<need){ groups.FLEX.spent+=p.sal; groups.FLEX.count++; used.add(p); }
+      if(idx<need){ addToGroup('FLEX',p); used.add(p); }
     });
   }
 
-  picks.forEach(p=>{ if(!used.has(p)) benchSpent+=p.sal; });
+  picks.forEach(p=>{
+    if(!used.has(p)){
+      benchSpent+=p.sal;
+      if(p.pending) benchPending+=p.sal; else benchDrafted+=p.sal;
+    }
+  });
 
-  return { groups, benchSpent };
+  return { groups, benchSpent, benchDrafted, benchPending };
 }
 
 function renderSpendPlan(){
@@ -1499,30 +1510,37 @@ function renderSpendPlan(){
   if(viewedTeam!==MY_TEAM){ el.style.display='none'; return; }
   el.style.display='block';
 
-  const tp=viewedPicks();
-  const { groups, benchSpent }=computeSpendVsPlan(tp);
-  const gcol={QB:'#3B82F6',RB:'#F5A623',WR:'#00C97A',FLEX:'#A78BFA',TE:'#E879B0'};
+  let tp=viewedPicks();
+  if(rosterShowActiveBids) tp=tp.concat(pendingPicksForViewedTeam());
+  const { groups, benchSpent, benchDrafted, benchPending }=computeSpendVsPlan(tp);
 
   const plannedTotal=Object.values(SPEND_PLAN).reduce((s,g)=>s+g.budget,0)+BENCH_BUDGET;
   const spentTotal=tp.reduce((s,p)=>s+p.sal,0);
 
+  // Two-segment bar: green = drafted (committed), amber = active high bids in
+  // progress (red instead, if adding the pending amount would blow the budget).
+  const barSegments=(drafted,pending,budget)=>{
+    const draftedPct=Math.min(100, budget?drafted/budget*100:0);
+    const pendingPct=Math.min(100-draftedPct, budget?pending/budget*100:0);
+    const pendingCol=(drafted+pending>budget)?'var(--red)':'var(--amber)';
+    return `<div class="sp-bar" style="position:absolute;left:0;width:${draftedPct}%;background:var(--green);"></div>
+      <div class="sp-bar" style="position:absolute;left:${draftedPct}%;width:${pendingPct}%;background:${pendingCol};"></div>`;
+  };
+
   const rows=Object.keys(SPEND_PLAN).map(g=>{
     const grp=groups[g], plan=SPEND_PLAN[g];
-    const pct=Math.min(100, plan.budget?grp.spent/plan.budget*100:0);
     const over=grp.spent>plan.budget;
-    const barCol=over?'var(--red)':gcol[g];
     return `<div class="sp-row">
       <div class="sp-grp">${plan.label}<small>${grp.count}/${plan.slots.length} slots</small></div>
-      <div class="sp-bar-wrap"><div class="sp-bar" style="width:${pct}%;background:${barCol};"></div></div>
+      <div class="sp-bar-wrap">${barSegments(grp.drafted,grp.pending,plan.budget)}</div>
       <div class="sp-nums ${over?'over':'ok'}"><span class="spent">$${grp.spent}</span> <span class="plan">/ $${plan.budget}</span></div>
     </div>`;
   }).join('');
 
-  const benchPct=Math.min(100, BENCH_BUDGET?benchSpent/BENCH_BUDGET*100:0);
   const benchOver=benchSpent>BENCH_BUDGET;
   const benchRow=`<div class="sp-row">
     <div class="sp-grp">Bench (top 15)<small>depth & youth</small></div>
-    <div class="sp-bar-wrap"><div class="sp-bar" style="width:${benchPct}%;background:${benchOver?'var(--red)':'#4A6080'};"></div></div>
+    <div class="sp-bar-wrap">${barSegments(benchDrafted,benchPending,BENCH_BUDGET)}</div>
     <div class="sp-nums ${benchOver?'over':'ok'}"><span class="spent">$${benchSpent}</span> <span class="plan">/ $${BENCH_BUDGET}</span></div>
   </div>`;
 
@@ -1751,6 +1769,19 @@ function setRosterActiveBids(show){
   if(draftedBtn) draftedBtn.classList.toggle('on',!show);
   if(bidsBtn) bidsBtn.classList.toggle('on',show);
   renderPlayers();
+  renderSpendPlan();
+}
+
+// Active nominations currently held by the viewed team, shaped like a pick
+// object (with a `pending` flag) so they can be dropped straight into the
+// same slot-assignment / spend-plan math as real drafted picks.
+function pendingPicksForViewedTeam(){
+  return nominations
+    .filter(n=>(n.owner||MY_TEAM)===viewedTeam)
+    .map(n=>({
+      nomId:n.id, owner:n.owner, name:n.player.display_name, pos:n.player.position,
+      age:n.player.age, sal:parseFloat(n.bid)||0, yrs:n.yrs||1, pending:true,
+    }));
 }
 
 function renderPlayers(){
@@ -1758,15 +1789,7 @@ function renderPlayers(){
   const benchEl=document.getElementById('bench-list');
   if(!startersEl||!benchEl) return;
   let tp=viewedPicks(); // real picks — keep references intact so players.indexOf(p) still works
-  if(rosterShowActiveBids){
-    const pendingPicks=nominations
-      .filter(n=>(n.owner||MY_TEAM)===viewedTeam)
-      .map(n=>({
-        nomId:n.id, owner:n.owner, name:n.player.display_name, pos:n.player.position,
-        age:n.player.age, sal:parseFloat(n.bid)||0, yrs:n.yrs||1, pending:true,
-      }));
-    tp=tp.concat(pendingPicks);
-  }
+  if(rosterShowActiveBids) tp=tp.concat(pendingPicksForViewedTeam());
   const {starters,benchRows}=assignRosterSlots(tp);
   startersEl.innerHTML=starters.map(buildRosterRowHtml).join('');
   benchEl.innerHTML=benchRows.map(buildRosterRowHtml).join('');
