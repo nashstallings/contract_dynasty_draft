@@ -390,6 +390,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <div class="tab-bar">
   <button class="tab-btn on" onclick="sw('board',this)">Board</button>
   <button class="tab-btn" onclick="sw('teams',this)">Teams</button>
+  <button class="tab-btn" onclick="sw('analysis',this)">Draft Analysis</button>
   <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
   <button class="tab-btn" onclick="sw('plan',this)">League Rules</button>
 </div>
@@ -408,6 +409,35 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     </div>
   </div>
   <div id="teams-content"></div>
+  <div style="height:40px;"></div>
+</div>
+
+<!-- ========== DRAFT ANALYSIS PANEL ========== -->
+<div class="panel" id="p-analysis">
+  <div class="board-head">
+    <div style="font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text);">Salary vs. Target Value</div>
+    <div class="board-head-right">
+      <div class="board-toggle">
+        <button class="board-toggle-btn on" id="dabt-drafted" onclick="setAnalysisMode(false)">Drafted</button>
+        <button class="board-toggle-btn" id="dabt-nominated" onclick="setAnalysisMode(true)">+ Nominated</button>
+      </div>
+      <div class="tgt-refresh-status" id="da-refresh-status"></div>
+      <button class="tgt-refresh-btn" id="da-refresh-btn" onclick="refreshDraftAnalysis()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+  <div class="av-filter-bar" style="margin-bottom:14px;">
+    <button class="av-filter-btn on pos-on-QB" data-dapos="QB" onclick="toggleAnalysisPos('QB',this)">QB</button>
+    <button class="av-filter-btn on pos-on-RB" data-dapos="RB" onclick="toggleAnalysisPos('RB',this)">RB</button>
+    <button class="av-filter-btn on pos-on-WR" data-dapos="WR" onclick="toggleAnalysisPos('WR',this)">WR</button>
+    <button class="av-filter-btn on pos-on-TE" data-dapos="TE" onclick="toggleAnalysisPos('TE',this)">TE</button>
+  </div>
+  <div class="eval-card">
+    <div class="eval-card-title">Salary paid/bid (y) vs. target auction value (x) <span class="eval-card-sub">dotted line = x = y (paid at target)</span></div>
+    <div class="eval-chart-wrap" style="height:480px;"><canvas id="da-chart"></canvas></div>
+  </div>
   <div style="height:40px;"></div>
 </div>
 
@@ -1294,6 +1324,7 @@ function sw(id,btn){
   document.getElementById('p-'+id).classList.add('on');
   if(id==='board'){ boardView(boardCurrentView); }
   else if(id==='teams'){ renderTeamsTab(); refreshTeamsTab(); }
+  else if(id==='analysis'){ renderDraftAnalysisChart(); }
 }
 
 // Refresh button — re-pull whichever sub-view is active. All re-fetch live BQ data.
@@ -1687,6 +1718,124 @@ function renderTeamsTab(){
       </div>
       <div>${historyHtml || '<div class="empty-state">No players drafted leaguewide yet.</div>'}</div>
     </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Draft Analysis tab — salary paid vs. target auction value scatter
+// ─────────────────────────────────────────────────────────────────────────────
+let daShowNominated=false;
+let daActivePositions=new Set(['QB','RB','WR','TE']);
+let draftAnalysisChart=null;
+
+function setAnalysisMode(showNominated){
+  daShowNominated=showNominated;
+  document.getElementById('dabt-drafted').classList.toggle('on',!showNominated);
+  document.getElementById('dabt-nominated').classList.toggle('on',showNominated);
+  renderDraftAnalysisChart();
+}
+
+function toggleAnalysisPos(pos,btn){
+  if(daActivePositions.has(pos)){ daActivePositions.delete(pos); btn.classList.remove('on','pos-on-'+pos); }
+  else{ daActivePositions.add(pos); btn.classList.add('on','pos-on-'+pos); }
+  renderDraftAnalysisChart();
+}
+
+async function refreshDraftAnalysis(){
+  const btn=document.getElementById('da-refresh-btn');
+  const status=document.getElementById('da-refresh-status');
+  if(btn) btn.classList.add('spinning');
+  if(status){ status.textContent='● Refreshing…'; status.className='tgt-refresh-status loading'; }
+  try{
+    await loadFromBQ();
+    await loadNominations();
+    renderDraftAnalysisChart();
+    const ts=new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    if(status){ status.textContent=`✓ Live · ${ts}`; status.className='tgt-refresh-status live'; }
+  }catch(err){
+    console.error('Draft analysis refresh failed:',err);
+    if(status){ status.textContent='✕ Refresh failed — showing last known'; status.className='tgt-refresh-status error'; }
+  }
+  if(btn) btn.classList.remove('spinning');
+}
+
+// Builds {drafted, nominated} point arrays — only players findable in avMap
+// contribute a point, since the x-axis needs a target auction value.
+function buildDraftAnalysisPoints(){
+  const drafted=[];
+  players.forEach(p=>{
+    if(!daActivePositions.has(p.pos)) return;
+    const av=avMap.get(p.name.toLowerCase());
+    if(!av||av.auction_value==null) return;
+    drafted.push({x:+av.auction_value,y:p.sal,pos:p.pos,name:p.name,owner:p.owner||MY_TEAM});
+  });
+  const nominated=[];
+  if(daShowNominated){
+    nominations.forEach(n=>{
+      const pos=n.player.position;
+      if(!daActivePositions.has(pos)) return;
+      const av=avMap.get(n.player.display_name.toLowerCase());
+      if(!av||av.auction_value==null) return;
+      nominated.push({x:+av.auction_value,y:parseFloat(n.bid)||0,pos,name:n.player.display_name,owner:n.owner||MY_TEAM});
+    });
+  }
+  return {drafted,nominated};
+}
+
+function renderDraftAnalysisChart(){
+  const canvas=document.getElementById('da-chart');
+  if(!canvas) return;
+  if(draftAnalysisChart){ draftAnalysisChart.destroy(); draftAnalysisChart=null; }
+  const {drafted,nominated}=buildDraftAnalysisPoints();
+
+  const positions=['QB','RB','WR','TE'];
+  const datasets=[];
+  positions.forEach(pos=>{
+    const pts=drafted.filter(p=>p.pos===pos);
+    if(pts.length) datasets.push({
+      label:pos+' (drafted)', data:pts, pos, kind:'drafted',
+      backgroundColor:TEAMS_POS_COLOR[pos], borderColor:TEAMS_POS_COLOR[pos],
+      pointStyle:'circle', pointRadius:5, pointHoverRadius:7,
+    });
+  });
+  if(daShowNominated){
+    positions.forEach(pos=>{
+      const pts=nominated.filter(p=>p.pos===pos);
+      if(pts.length) datasets.push({
+        label:pos+' (nominated)', data:pts, pos, kind:'nominated',
+        backgroundColor:TEAMS_POS_COLOR[pos]+'99', borderColor:TEAMS_POS_COLOR[pos],
+        pointStyle:'triangle', pointRadius:6, pointHoverRadius:8, borderWidth:2,
+      });
+    });
+  }
+
+  const allPts=[...drafted,...nominated];
+  const maxVal=Math.max(10,...allPts.map(p=>Math.max(p.x,p.y)))*1.08;
+  datasets.push({
+    label:'x = y', data:[{x:0,y:0},{x:maxVal,y:maxVal}], type:'line',
+    borderColor:'rgba(122,144,174,0.6)', borderWidth:1.5, borderDash:[6,4],
+    pointRadius:0, fill:false, tension:0, order:99,
+  });
+
+  draftAnalysisChart=new Chart(canvas.getContext('2d'),{
+    type:'scatter',
+    data:{datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#a0b0c8',font:{size:11},filter:item=>item.text!=='x = y'}},
+        tooltip:{callbacks:{label:c=>{
+          if(c.dataset.label==='x = y') return null;
+          const p=c.raw;
+          return `${p.name} (${p.pos}) — paid $${p.y} / target $${p.x}`;
+        }},
+        backgroundColor:'rgba(15,25,40,0.95)',titleColor:'#fff',bodyColor:'#a0b0c8',borderColor:'rgba(255,255,255,0.1)',borderWidth:1},
+      },
+      scales:{
+        x:{title:{display:true,text:'Target auction value ($)',color:'#7A90AE'},grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}},min:0,max:maxVal},
+        y:{title:{display:true,text:'Salary paid ($)',color:'#7A90AE'},grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#7A90AE',font:{size:10}},min:0,max:maxVal},
+      }
+    }
+  });
 }
 
 // Literal starting lineup for this league: QB, 2RB, 3WR, TE, 2FLEX (RB/WR/TE), 1SF (any).
