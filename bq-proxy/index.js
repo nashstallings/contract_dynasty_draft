@@ -284,11 +284,11 @@ exports.draftPicksInsert = async (req, res) => {
     }
 
     try {
-      const pick_id         = String(body.pick_id).replace(/'/g,"''");
+      const pick_id         = String(body.pick_id);
       const drafted_at      = body.drafted_at || new Date().toISOString();
-      const owner           = String(body.owner || 'NashStallings').replace(/'/g,"''");
-      const player_name     = String(body.player_name).replace(/'/g,"''");
-      const position        = String(body.position).replace(/'/g,"''");
+      const owner           = String(body.owner || 'NashStallings');
+      const player_name     = String(body.player_name);
+      const position        = String(body.position);
       const age             = parseInt(body.age) || 0;
       const salary          = parseFloat(body.salary);
       const contract_yrs    = parseInt(body.contract_yrs);
@@ -302,19 +302,24 @@ exports.draftPicksInsert = async (req, res) => {
             (pick_id, drafted_at, owner, player_name, position, age, salary,
              contract_yrs, discount_pct, cap_hit, total_commitment)
           VALUES (
-            '${pick_id}',
-            TIMESTAMP('${drafted_at}'),
-            '${owner}',
-            '${player_name}',
-            '${position}',
-            ${age},
-            CAST(${salary} AS NUMERIC),
-            ${contract_yrs},
-            CAST(${discount_pct} AS NUMERIC),
-            CAST(${cap_hit} AS NUMERIC),
-            CAST(${total_commitment} AS NUMERIC)
+            @pick_id,
+            TIMESTAMP(@drafted_at),
+            @owner,
+            @player_name,
+            @position,
+            @age,
+            CAST(@salary AS NUMERIC),
+            @contract_yrs,
+            CAST(@discount_pct AS NUMERIC),
+            CAST(@cap_hit AS NUMERIC),
+            CAST(@total_commitment AS NUMERIC)
           )
         `,
+        params: {
+          pick_id, drafted_at, owner, player_name, position, age,
+          salary, contract_yrs, discount_pct, cap_hit, total_commitment,
+        },
+        types: { age: 'INT64', salary: 'NUMERIC', contract_yrs: 'INT64', discount_pct: 'NUMERIC', cap_hit: 'NUMERIC', total_commitment: 'NUMERIC' },
       });
       console.log(`Inserted: ${player_name} (${position}) $${salary}/${contract_yrs}yr → ${owner}`);
       res.status(200).json({ success: true, pick_id: body.pick_id });
