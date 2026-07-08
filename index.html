@@ -1875,8 +1875,7 @@ function renderDraftAnalysisValueTable(){
       return { id:n.id, name:n.player.display_name, pos:n.player.position, owner:n.owner||MY_TEAM, bid, target, value:target-bid };
     })
     .filter(Boolean)
-    .sort((a,b)=>b.value-a.value)
-    .slice(0,10);
+    .sort((a,b)=>b.value-a.value);
 
   if(!rows.length){
     tbody.innerHTML='<tr><td colspan="6" class="av-empty">No nominated players on the block.</td></tr>';
