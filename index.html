@@ -438,6 +438,16 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     <div class="eval-card-title">Salary paid/bid (y) vs. target auction value (x) <span class="eval-card-sub">dotted line = x = y (paid at target)</span></div>
     <div class="eval-chart-wrap" style="height:480px;"><canvas id="da-chart"></canvas></div>
   </div>
+  <div class="section-label">Biggest Values on the Board <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">currently nominated players, ranked by target − current bid</span></div>
+  <div class="av-table-wrap" style="margin-bottom:24px;">
+    <table class="av-table" style="font-family:var(--font-mono);">
+      <thead><tr>
+        <th>Player</th><th>Pos</th><th>High bidder</th>
+        <th class="r">Current bid</th><th class="r">Target</th><th class="r">Value</th>
+      </tr></thead>
+      <tbody id="da-value-tbody"><tr><td colspan="6" class="av-empty">No nominated players on the block.</td></tr></tbody>
+    </table>
+  </div>
   <div style="height:40px;"></div>
 </div>
 
@@ -1836,6 +1846,47 @@ function renderDraftAnalysisChart(){
       }
     }
   });
+
+  renderDraftAnalysisValueTable();
+}
+
+// Ranks currently-nominated players by value (target auction value minus the
+// current bid) — the biggest positive gaps are the best bargains still live.
+function renderDraftAnalysisValueTable(){
+  const tbody=document.getElementById('da-value-tbody');
+  if(!tbody) return;
+  const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
+
+  const rows=nominations
+    .filter(n=>daActivePositions.has(n.player.position))
+    .map(n=>{
+      const av=avMap.get(n.player.display_name.toLowerCase());
+      if(!av||av.auction_value==null) return null;
+      const bid=parseFloat(n.bid)||0;
+      const target=+av.auction_value;
+      return { name:n.player.display_name, pos:n.player.position, owner:n.owner||MY_TEAM, bid, target, value:target-bid };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>b.value-a.value)
+    .slice(0,10);
+
+  if(!rows.length){
+    tbody.innerHTML='<tr><td colspan="6" class="av-empty">No nominated players on the block.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML=rows.map(r=>{
+    const valColor=r.value>0?'var(--green)':r.value<0?'var(--red)':'var(--text3)';
+    const sign=r.value>0?'+':'';
+    return `<tr>
+      <td class="player-name-cell">${r.name}</td>
+      <td><span class="ptag ${pc[r.pos]||'t4'}">${r.pos}</span></td>
+      <td>${r.owner}</td>
+      <td class="r">$${r.bid}</td>
+      <td class="r">$${r.target}</td>
+      <td class="r" style="color:${valColor};font-weight:700;">${sign}$${r.value}</td>
+    </tr>`;
+  }).join('');
 }
 
 // Literal starting lineup for this league: QB, 2RB, 3WR, TE, 2FLEX (RB/WR/TE), 1SF (any).
