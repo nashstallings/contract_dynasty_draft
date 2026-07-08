@@ -19,6 +19,7 @@
 }
 html{background:var(--bg);color:var(--text);font-family:var(--font-body);}
 body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
+.sticky-top{position:sticky;top:0;z-index:50;background:var(--bg);}
 .site-header{padding:32px 32px 0;display:flex;align-items:flex-start;justify-content:space-between;animation:fadeUp .5s ease both;}
 .eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--green);font-family:var(--font-mono);margin-bottom:6px;}
 .title{font-family:var(--font-head);font-size:44px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--text);}
@@ -328,6 +329,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 @media(max-width:640px){
   body{padding:0 0 60px;}
+  .sticky-top{padding-bottom:2px;}
   .site-header{flex-direction:column;gap:14px;padding:18px 16px 0;}
   .title{font-size:32px;}.subtitle{font-size:13px;}
   .header-badges{flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:flex-start;gap:5px;}
@@ -384,21 +386,23 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 </head>
 <body>
 
-<div class="site-header">
-  <div class="header-left">
-    <div class="title">Dynasty Tycoon <span>Draft</span></div>
-    <div class="subtitle">12-team · Superflex · 0.5 / 1.0 PPR · $250 budget</div>
+<div class="sticky-top">
+  <div class="site-header">
+    <div class="header-left">
+      <div class="title">Dynasty Tycoon <span>Draft</span></div>
+      <div class="subtitle">12-team · Superflex · 0.5 / 1.0 PPR · $250 budget</div>
+    </div>
   </div>
-</div>
 
-<div class="tab-bar">
-  <button class="tab-btn on" onclick="sw('board',this)">Board</button>
-  <button class="tab-btn" onclick="sw('teams',this)">Teams</button>
-  <button class="tab-btn" onclick="sw('analysis',this)">Draft Analysis</button>
-  <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
-  <button class="tab-btn" onclick="sw('plan',this)">League Rules</button>
+  <div class="tab-bar">
+    <button class="tab-btn on" onclick="sw('board',this)">Board</button>
+    <button class="tab-btn" onclick="sw('teams',this)">Teams</button>
+    <button class="tab-btn" onclick="sw('analysis',this)">Draft Analysis</button>
+    <button class="tab-btn" onclick="sw('calc',this)">Player Eval</button>
+    <button class="tab-btn" onclick="sw('plan',this)">League Rules</button>
+  </div>
+  <div class="tab-divider"></div>
 </div>
-<div class="tab-divider"></div>
 
 <!-- ========== TEAMS PANEL ========== -->
 <div class="panel" id="p-teams">
