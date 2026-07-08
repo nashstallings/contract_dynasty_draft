@@ -262,6 +262,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 
 /* ── Draft Targets ── */
 .board-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+@keyframes nomJumpPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,201,122,0);}30%{box-shadow:0 0 0 4px rgba(0,201,122,0.55);}}
+.nom-jump-pulse{animation:nomJumpPulse 1s ease-out 2;}
+.da-value-row{cursor:pointer;}
+.da-value-row:hover td{background:var(--card2);}
 .board-head-right{display:flex;align-items:center;gap:12px;}
 .board-toggle{display:inline-flex;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:3px;gap:2px;}
 .board-toggle-btn{font-family:var(--font-head);font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:7px 16px;background:none;border:none;color:var(--text3);cursor:pointer;border-radius:6px;transition:background .15s,color .15s;}
@@ -1864,7 +1868,7 @@ function renderDraftAnalysisValueTable(){
       if(!av||av.auction_value==null) return null;
       const bid=parseFloat(n.bid)||0;
       const target=+av.auction_value;
-      return { name:n.player.display_name, pos:n.player.position, owner:n.owner||MY_TEAM, bid, target, value:target-bid };
+      return { id:n.id, name:n.player.display_name, pos:n.player.position, owner:n.owner||MY_TEAM, bid, target, value:target-bid };
     })
     .filter(Boolean)
     .sort((a,b)=>b.value-a.value)
@@ -1878,7 +1882,7 @@ function renderDraftAnalysisValueTable(){
   tbody.innerHTML=rows.map(r=>{
     const valColor=r.value>0?'var(--green)':r.value<0?'var(--red)':'var(--text3)';
     const sign=r.value>0?'+':'';
-    return `<tr>
+    return `<tr class="da-value-row" onclick="jumpToNomination('${r.id}')">
       <td class="player-name-cell">${r.name}</td>
       <td><span class="ptag ${pc[r.pos]||'t4'}">${r.pos}</span></td>
       <td>${r.owner}</td>
@@ -1887,6 +1891,23 @@ function renderDraftAnalysisValueTable(){
       <td class="r" style="color:${valColor};font-weight:700;">${sign}$${r.value}</td>
     </tr>`;
   }).join('');
+}
+
+// Jumps from the Draft Analysis value table straight to a nomination's bid
+// field on the Board/Tracker tab so you can act on it immediately.
+function jumpToNomination(nomId){
+  const boardBtn=document.querySelector(".tab-btn[onclick*=\"'board'\"]");
+  if(boardBtn) sw('board',boardBtn);
+  boardView('tracker');
+  setTimeout(()=>{
+    const row=document.getElementById('nom-row-'+nomId);
+    if(!row) return;
+    row.scrollIntoView({behavior:'smooth',block:'center'});
+    row.classList.add('nom-jump-pulse');
+    setTimeout(()=>row.classList.remove('nom-jump-pulse'),2000);
+    const bidInput=document.getElementById('nom-bid-'+nomId);
+    if(bidInput) bidInput.focus();
+  },50);
 }
 
 // Literal starting lineup for this league: QB, 2RB, 3WR, TE, 2FLEX (RB/WR/TE), 1SF (any).
