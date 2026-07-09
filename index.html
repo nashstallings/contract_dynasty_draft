@@ -407,7 +407,10 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 <!-- ========== TEAMS PANEL ========== -->
 <div class="panel" id="p-teams">
   <div class="board-head">
-    <div style="font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:.5px;color:var(--text);">League Team Makeup</div>
+    <div class="board-toggle">
+      <button class="board-toggle-btn on" id="tmbt-makeup" onclick="teamsView('makeup')">League Team Makeup</button>
+      <button class="board-toggle-btn" id="tmbt-roster" onclick="teamsView('roster')">Roster Overview</button>
+    </div>
     <div class="board-head-right">
       <div class="tgt-refresh-status" id="teams-refresh-status"></div>
       <button class="tgt-refresh-btn" id="teams-refresh-btn" onclick="refreshTeamsTab()">
@@ -416,7 +419,63 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       </button>
     </div>
   </div>
-  <div id="teams-content"></div>
+
+  <!-- ── Sub-view: League Team Makeup ── -->
+  <div id="teams-makeup">
+    <div id="teams-content"></div>
+  </div>
+
+  <!-- ── Sub-view: Roster Overview ── -->
+  <div id="teams-roster" style="display:none;">
+    <!-- Team selector: whose roster am I viewing -->
+    <div class="team-selector-bar">
+      <label class="team-selector-label">Viewing roster</label>
+      <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
+      <div class="board-toggle">
+        <button class="board-toggle-btn on" id="rbt-drafted" onclick="setRosterActiveBids(false)">Drafted</button>
+        <button class="board-toggle-btn" id="rbt-bids" onclick="setRosterActiveBids(true)">+ High Bids</button>
+      </div>
+      <div class="team-selector-spacer"></div>
+      <div class="team-league-summary" id="team-league-summary"></div>
+    </div>
+
+    <!-- Budget block for the viewed team -->
+    <div class="budget-block">
+      <div class="budget-metrics" id="bmet"></div>
+      <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
+      <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
+      <div class="pos-pills" id="pos-pills"></div>
+    </div>
+
+    <!-- Cap & contract breakdown for the viewed team -->
+    <div class="cap-breakdown" id="cap-breakdown"></div>
+
+    <!-- Spending plan vs. actual (only shown for your team) -->
+    <div class="spend-plan" id="spend-plan"></div>
+
+    <div class="section-label">Starters</div>
+    <div class="player-list-card" id="starters-wrap" style="margin-bottom:24px;">
+      <div class="roster-header">
+        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
+        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
+        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
+        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
+      </div>
+      <div id="starters-list"></div>
+    </div>
+
+    <div class="section-label">Bench <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">15 spots</span></div>
+    <div class="player-list-card" id="bench-wrap">
+      <div class="roster-header">
+        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
+        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
+        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
+        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
+      </div>
+      <div id="bench-list"></div>
+    </div>
+  </div>
+
   <div style="height:40px;"></div>
 </div>
 
@@ -533,54 +592,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
         <span id="bq-status" style="font-family:var(--font-mono);font-size:11px;letter-spacing:.5px;opacity:0;transition:opacity .3s;"></span>
       </div>
       <div id="nom-list" style="margin-top:16px;display:flex;flex-direction:column;gap:10px;"></div>
-    </div>
-
-    <!-- Team selector: whose roster am I viewing -->
-    <div class="team-selector-bar">
-      <label class="team-selector-label">Viewing roster</label>
-      <select id="team-selector" onchange="setViewedTeam(this.value)"></select>
-      <div class="board-toggle">
-        <button class="board-toggle-btn on" id="rbt-drafted" onclick="setRosterActiveBids(false)">Drafted</button>
-        <button class="board-toggle-btn" id="rbt-bids" onclick="setRosterActiveBids(true)">+ High Bids</button>
-      </div>
-      <div class="team-selector-spacer"></div>
-      <div class="team-league-summary" id="team-league-summary"></div>
-    </div>
-
-    <!-- Budget block for the viewed team -->
-    <div class="budget-block">
-      <div class="budget-metrics" id="bmet"></div>
-      <div class="budget-bar-outer"><div class="budget-bar-inner" id="bbar" style="width:100%;background:var(--green);"></div></div>
-      <div class="budget-bar-labels"><span>$0 spent</span><span id="blbl">$250 remaining</span></div>
-      <div class="pos-pills" id="pos-pills"></div>
-    </div>
-
-    <!-- Cap & contract breakdown for the viewed team -->
-    <div class="cap-breakdown" id="cap-breakdown"></div>
-
-    <!-- Spending plan vs. actual (only shown for your team) -->
-    <div class="spend-plan" id="spend-plan"></div>
-
-    <div class="section-label">Starters</div>
-    <div class="player-list-card" id="starters-wrap" style="margin-bottom:24px;">
-      <div class="roster-header">
-        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
-        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
-        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
-        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
-      </div>
-      <div id="starters-list"></div>
-    </div>
-
-    <div class="section-label">Bench <span style="font-family:var(--font-mono);font-size:10px;font-weight:400;letter-spacing:.5px;color:var(--text3);text-transform:none;margin-left:8px;">15 spots</span></div>
-    <div class="player-list-card" id="bench-wrap">
-      <div class="roster-header">
-        <span>Slot</span><span>Player</span><span style="text-align:center;">Pos</span>
-        <span style="text-align:right;">Age</span><span style="text-align:right;">Salary</span>
-        <span style="text-align:right;">Target</span><span style="text-align:right;">+/−</span>
-        <span style="text-align:right;">Contract</span><span style="text-align:right;">Cap/yr</span><span></span>
-      </div>
-      <div id="bench-list"></div>
     </div>
   </div>
 
@@ -1367,6 +1378,19 @@ function boardView(view){
   if(view==='tracker') updBudget();
   else if(view==='targets') renderTargets();
   else renderAV();
+}
+
+// Teams tab sub-view toggle: 'makeup' (leaguewide scarcity + team breakdown),
+// 'roster' (the viewed team's slotted roster, budget, cap + spend plan).
+let teamsCurrentView='makeup';
+function teamsView(view){
+  teamsCurrentView=view;
+  document.getElementById('teams-makeup').style.display = view==='makeup'?'block':'none';
+  document.getElementById('teams-roster').style.display = view==='roster'?'block':'none';
+  document.getElementById('tmbt-makeup').classList.toggle('on',view==='makeup');
+  document.getElementById('tmbt-roster').classList.toggle('on',view==='roster');
+  if(view==='makeup') renderTeamsTab();
+  else updBudget();
 }
 
 // Picks belonging to the team currently being viewed
