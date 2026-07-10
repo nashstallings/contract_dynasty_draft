@@ -647,8 +647,8 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
             <th>Player</th>
             <th style="width:42px;">Pos</th>
             <th style="width:36px;">Age</th>
-            <th class="r" style="width:64px;">Target</th>
-            <th class="r" style="width:56px;" title="Redraft-only value, ignoring age/longevity — what a 1yr &quot;prove it&quot; deal should cost">1yr</th>
+            <th class="r" style="width:64px;" title="Age-aware long-term value — what a 4yr+ commitment should cost">Dynasty</th>
+            <th class="r" style="width:64px;" title="Redraft-only value, ignoring age/longevity — what a 1yr &quot;prove it&quot; deal should cost">Redraft</th>
             <th style="width:80px;">Tier</th>
             <th>Notes</th>
           </tr>
@@ -862,7 +862,7 @@ function renderAV(){
       <td><span class="ptag ${pc[r.position]||''}">${r.position}</span></td>
       <td style="color:var(--text2);font-family:var(--font-mono);font-size:12px;">${r.age??'—'}</td>
       <td class="r"><span class="av-val">$${r.auction_value}</span></td>
-      <td class="r"><span class="av-val" style="opacity:.7;">$${r.redraft_value??'—'}</span></td>
+      <td class="r"><span class="av-val">$${r.redraft_value??'—'}</span></td>
       <td>${tBadge[r.tier]||r.tier}</td>
       <td class="av-note">${r.ranking_note||''}</td>
     </tr>`;
