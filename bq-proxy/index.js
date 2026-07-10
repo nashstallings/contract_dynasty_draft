@@ -53,6 +53,7 @@ exports.draftPicksInsert = async (req, res) => {
               av.position,
               av.rank,
               av.auction_value,
+              av.redraft_value,
               av.tier,
               av.tier_desc,
               av.ranking_note,

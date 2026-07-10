@@ -648,11 +648,12 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
             <th style="width:42px;">Pos</th>
             <th style="width:36px;">Age</th>
             <th class="r" style="width:64px;">Target</th>
+            <th class="r" style="width:56px;" title="Redraft-only value, ignoring age/longevity — what a 1yr &quot;prove it&quot; deal should cost">1yr</th>
             <th style="width:80px;">Tier</th>
             <th>Notes</th>
           </tr>
         </thead>
-        <tbody id="av-tbody"><tr><td colspan="7" class="av-empty">Loading…</td></tr></tbody>
+        <tbody id="av-tbody"><tr><td colspan="8" class="av-empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -694,8 +695,12 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <div class="eval-card-title">2026 Auction Value <span class="eval-card-sub">(BQ consensus)</span></div>
       <div class="eval-proj-placeholder" id="eval-proj">
         <div class="eval-proj-row">
-          <span class="eval-proj-lbl">Target salary</span>
+          <span class="eval-proj-lbl">Dynasty target (4yr+)</span>
           <span class="eval-proj-val eval-proj-empty" id="ep-salary">—</span>
+        </div>
+        <div class="eval-proj-row">
+          <span class="eval-proj-lbl">Redraft target (1yr)</span>
+          <span class="eval-proj-val eval-proj-empty" id="ep-redraft">—</span>
         </div>
         <div class="eval-proj-row">
           <span class="eval-proj-lbl">Overall rank</span>
@@ -725,6 +730,16 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 // ─────────────────────────────────────────────────────────────────────────────
 const DISC={1:0,2:.08,3:.16,4:.24};
 const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
+
+// Longer contracts should price closer to the dynasty (age-aware) target;
+// short "prove it" deals should price closer to the redraft (this-year-only) target.
+const REDRAFT_WEIGHT={1:1,2:.75,3:.5,4:.25};
+function effectiveTarget(av,yrs){
+  if(!av) return null;
+  if(av.redraft_value==null) return av.auction_value;
+  const w=REDRAFT_WEIGHT[yrs]??REDRAFT_WEIGHT[1];
+  return Math.round(av.redraft_value*w+av.auction_value*(1-w));
+}
 let players=[];
 let rosterList=[];
 let nominations=[];   // players currently on the block: {id, player, bid, owner, yrs}
@@ -809,7 +824,7 @@ function renderAV(){
   const tbody=document.getElementById('av-tbody');
   if(!tbody) return;
   if(!auctionValues.length){
-    tbody.innerHTML='<tr><td colspan="7" class="av-empty">Loading…</td></tr>';
+    tbody.innerHTML='<tr><td colspan="8" class="av-empty">Loading…</td></tr>';
     return;
   }
   const sortBy=document.getElementById('av-sort')?.value||'rank';
@@ -821,7 +836,7 @@ function renderAV(){
   else rows.sort((a,b)=>a.rank-b.rank);
 
   if(!rows.length){
-    tbody.innerHTML='<tr><td colspan="7" class="av-empty">No players match this filter</td></tr>';
+    tbody.innerHTML='<tr><td colspan="8" class="av-empty">No players match this filter</td></tr>';
     return;
   }
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
@@ -838,7 +853,7 @@ function renderAV(){
   let lastTier='';
   rows.forEach(r=>{
     if(sortBy==='rank'&&avTierFilter==='ALL'&&r.tier!==lastTier){
-      html+=`<tr class="av-tier-sep"><td colspan="7">${r.tier} — ${r.tier_desc||''}</td></tr>`;
+      html+=`<tr class="av-tier-sep"><td colspan="8">${r.tier} — ${r.tier_desc||''}</td></tr>`;
       lastTier=r.tier;
     }
     html+=`<tr class="${tClass[r.tier]||''}">
@@ -847,6 +862,7 @@ function renderAV(){
       <td><span class="ptag ${pc[r.position]||''}">${r.position}</span></td>
       <td style="color:var(--text2);font-family:var(--font-mono);font-size:12px;">${r.age??'—'}</td>
       <td class="r"><span class="av-val">$${r.auction_value}</span></td>
+      <td class="r"><span class="av-val" style="opacity:.7;">$${r.redraft_value??'—'}</span></td>
       <td>${tBadge[r.tier]||r.tier}</td>
       <td class="av-note">${r.ranking_note||''}</td>
     </tr>`;
@@ -1176,6 +1192,8 @@ function onNomYrsChange(id,val){
   if(!nom)return;
   nom.yrs=parseInt(val)||1;
   nomLastLocalEditAt[id]=Date.now();
+  updateNomRowMeta(id);
+  updateNomRowVerdict(id);
   renderCapBreakdown();
   if(rosterShowActiveBids) renderPlayers();
   enqueuePushNomination(id);
@@ -1239,18 +1257,19 @@ function computeNomVerdict(nom){
     return `<div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">No target value on board · ${nom.owner} has $${ownerRemaining} left</div>`;
   }
 
+  const target=effectiveTarget(av,nom.yrs);
   let verdict,color;
   if(bid<=0){verdict='Enter bid';color='var(--text3)';}
   else if(bid>ownerRemaining){verdict="CAN'T AFFORD";color='var(--red)';}
   else{
-    const diffPct=(bid-av.auction_value)/av.auction_value;
+    const diffPct=(bid-target)/target;
     if(diffPct<=0){verdict='TARGET';color='var(--green)';}
     else if(diffPct<=0.15){verdict='CAUTION';color='var(--amber)';}
     else{verdict='PASS';color='var(--red)';}
   }
 
   return `<div style="font-family:var(--font-head);font-size:14px;font-weight:800;color:${color};">${verdict}</div>
-    <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);">Target $${av.auction_value} · ${av.tier}${planLine} · ${nom.owner} has $${ownerRemaining} left</div>`;
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);">Target $${target} (${nom.yrs}yr blend) · ${av.tier}${planLine} · ${nom.owner} has $${ownerRemaining} left</div>`;
 }
 
 function updateNomRowVerdict(id){
@@ -1258,6 +1277,15 @@ function updateNomRowVerdict(id){
   const el=document.getElementById('nom-verdict-'+id);
   if(!nom||!el)return;
   el.innerHTML=computeNomVerdict(nom);
+}
+
+function updateNomRowMeta(id){
+  const nom=nominations.find(n=>n.id===id);
+  const el=document.getElementById('nom-meta-'+id);
+  if(!nom||!el)return;
+  const p=nom.player;
+  const av=avMap.get(p.display_name.toLowerCase());
+  el.innerHTML=`${p.age!=null?p.age+'y':''}${av?' · Target $'+effectiveTarget(av,nom.yrs):''}`;
 }
 
 function buildNomRowHtml(nom){
@@ -1272,7 +1300,7 @@ function buildNomRowHtml(nom){
         <span class="ptag ${pc[pos]||''}">${pos}</span>
         ${av?`<span class="tbadge ${tierClassOf(av.tier)}">${av.tier.replace('TIER ','T')}</span>`:''}
       </div>
-      <div class="tgt-meta">${p.age!=null?p.age+'y':''}${av?' · Target $'+av.auction_value:''}</div>
+      <div class="tgt-meta" id="nom-meta-${nom.id}">${p.age!=null?p.age+'y':''}${av?' · Target $'+effectiveTarget(av,nom.yrs):''}</div>
       <div id="nom-verdict-${nom.id}" style="margin-top:4px;"></div>
     </div>
     <div class="nom-controls">
@@ -1416,10 +1444,11 @@ function setViewedTeam(team){
   updBudget();
 }
 
-function ouBadge(sal,av){
+function ouBadge(sal,av,yrs){
   if(!av) return '<span class="ou-badge ou-none">—</span>';
-  const d=sal-av.auction_value;
-  if(d===0) return `<span class="ou-badge ou-exact">=$${av.auction_value}</span>`;
+  const target=effectiveTarget(av,yrs);
+  const d=sal-target;
+  if(d===0) return `<span class="ou-badge ou-exact">=$${target}</span>`;
   if(d>0)   return `<span class="ou-badge ou-over">+$${d}</span>`;
   return           `<span class="ou-badge ou-under">−$${Math.abs(d)}</span>`;
 }
@@ -1808,7 +1837,7 @@ function buildDraftAnalysisPoints(){
     if(!daActivePositions.has(p.pos)) return;
     const av=avMap.get(p.name.toLowerCase());
     if(!av||av.auction_value==null) return;
-    drafted.push({x:+av.auction_value,y:p.sal,pos:p.pos,name:p.name,owner:p.owner||MY_TEAM});
+    drafted.push({x:+effectiveTarget(av,p.yrs),y:p.sal,pos:p.pos,name:p.name,owner:p.owner||MY_TEAM});
   });
   const nominated=[];
   if(daShowNominated){
@@ -1817,7 +1846,7 @@ function buildDraftAnalysisPoints(){
       if(!daActivePositions.has(pos)) return;
       const av=avMap.get(n.player.display_name.toLowerCase());
       if(!av||av.auction_value==null) return;
-      nominated.push({x:+av.auction_value,y:parseFloat(n.bid)||0,pos,name:n.player.display_name,owner:n.owner||MY_TEAM});
+      nominated.push({x:+effectiveTarget(av,n.yrs),y:parseFloat(n.bid)||0,pos,name:n.player.display_name,owner:n.owner||MY_TEAM});
     });
   }
   return {drafted,nominated};
@@ -1895,7 +1924,7 @@ function renderDraftAnalysisValueTable(){
       const av=avMap.get(n.player.display_name.toLowerCase());
       if(!av||av.auction_value==null) return null;
       const bid=parseFloat(n.bid)||0;
-      const target=+av.auction_value;
+      const target=+effectiveTarget(av,n.yrs);
       return { id:n.id, name:n.player.display_name, pos:n.player.position, owner:n.owner||MY_TEAM, bid, target, value:target-bid };
     })
     .filter(Boolean)
@@ -1989,7 +2018,7 @@ function buildRosterRowHtml(row){
   const cap=(p.sal*(1-d)).toFixed(1);
   const av=avMap.get(p.name.toLowerCase());
   const targetCell=av
-    ?`<span class="player-cell" style="color:var(--blue);">$${av.auction_value}</span>`
+    ?`<span class="player-cell" style="color:var(--blue);">$${effectiveTarget(av,p.yrs)}</span>`
     :`<span class="player-cell ou-none">—</span>`;
   const delAction=isPending?`removeNomination('${p.nomId}')`:`delP(${gi})`;
   const delLabel=isPending?'Remove nomination':'Remove player';
@@ -2000,7 +2029,7 @@ function buildRosterRowHtml(row){
     <span class="player-cell">${p.age}</span>
     <span class="player-cell bold">$${p.sal}</span>
     ${targetCell}
-    <span class="player-cell">${ouBadge(p.sal,av)}</span>
+    <span class="player-cell">${ouBadge(p.sal,av,p.yrs)}</span>
     <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
     <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
     <button class="del-btn" onclick="${delAction}" aria-label="${delLabel}">
@@ -2165,22 +2194,23 @@ function renderEvalPlayer(p,data){
 
 
   // 2026 Auction Value section — populated from avMap
-  const epSal=document.getElementById('ep-salary'),epRank=document.getElementById('ep-rank'),
+  const epSal=document.getElementById('ep-salary'),epRedraft=document.getElementById('ep-redraft'),epRank=document.getElementById('ep-rank'),
         epTier=document.getElementById('ep-tier'),epDraft=document.getElementById('ep-drafted'),
         epOuRow=document.getElementById('ep-ou-row'),epOu=document.getElementById('ep-ou');
   if(av){
     epSal.textContent='$'+av.auction_value;   epSal.className='eval-proj-val';
+    epRedraft.textContent='$'+(av.redraft_value??av.auction_value); epRedraft.className='eval-proj-val';
     epRank.textContent='#'+av.rank+' overall'; epRank.className='eval-proj-val';
     epTier.textContent=av.tier+' — '+(av.tier_desc||''); epTier.className='eval-proj-val';
   }else{
-    ['ep-salary','ep-rank','ep-tier'].forEach(id=>{
+    ['ep-salary','ep-redraft','ep-rank','ep-tier'].forEach(id=>{
       const el=document.getElementById(id);el.textContent='—';el.className='eval-proj-val eval-proj-empty';
     });
   }
   if(drafted){
     epDraft.textContent='$'+drafted.sal+' · '+drafted.yrs+'yr'; epDraft.className='eval-proj-val';
     if(av){
-      const diff=drafted.sal-av.auction_value;
+      const diff=drafted.sal-effectiveTarget(av,drafted.yrs);
       epOuRow.style.display='flex';
       if(diff===0){ epOu.textContent='At market'; epOu.style.color='var(--blue)'; }
       else if(diff>0){ epOu.textContent='+$'+diff+' overpay'; epOu.style.color='var(--red)'; }
