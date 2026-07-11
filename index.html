@@ -453,6 +453,9 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
     <!-- Spending plan vs. actual (only shown for your team) -->
     <div class="spend-plan" id="spend-plan"></div>
 
+    <!-- Suggested rebalance when a position group runs over its plan (only shown for your team) -->
+    <div class="spend-plan" id="rebalance-plan"></div>
+
     <div class="section-label">Starters</div>
     <div class="player-list-card" id="starters-wrap" style="margin-bottom:24px;">
       <div class="roster-header">
@@ -1479,6 +1482,7 @@ function updBudget(){
   renderLeagueSummary();
   renderCapBreakdown();
   renderSpendPlan();
+  renderRebalancePlan();
   renderTeamsTab();
   nominations.forEach(n=>updateNomRowVerdict(n.id));
 }
@@ -1603,6 +1607,96 @@ function computeSpendVsPlan(picks){
   });
 
   return { groups, benchSpent, benchDrafted, benchPending };
+}
+
+// Redistributes the plan when a group runs over budget. SPEND_PLAN's group
+// budgets + BENCH_BUDGET sum to exactly $250, so (budget - spent) summed
+// across every group always equals real remaining budget — but nothing
+// forces that deficit into any one group's displayed numbers. This takes
+// any group over its budget and shrinks every other still-open group's
+// remaining budget (and slot bands) proportionally, so "adjust elsewhere"
+// is an explicit, visible number instead of just less cash left overall.
+function computeRebalancePlan(myPicks){
+  const { groups, benchSpent }=computeSpendVsPlan(myPicks);
+  const buckets=Object.keys(SPEND_PLAN).map(g=>{
+    const plan=SPEND_PLAN[g], grp=groups[g];
+    return { key:g, label:plan.label, budget:plan.budget, spent:grp.spent, filled:grp.count, slots:plan.slots };
+  });
+  buckets.push({ key:'BENCH', label:'Bench (top 15)', budget:BENCH_BUDGET, spent:benchSpent, filled:null, slots:null });
+
+  buckets.forEach(b=>{ b.remainingPlanned=+(b.budget-b.spent).toFixed(2); });
+
+  const totalOverage=+buckets.filter(b=>b.remainingPlanned<0)
+    .reduce((s,b)=>s-b.remainingPlanned,0).toFixed(2);
+  const donorPool=buckets.filter(b=>b.remainingPlanned>0)
+    .reduce((s,b)=>s+b.remainingPlanned,0);
+  const cutRatio=totalOverage>0 && donorPool>0 ? Math.min(1,totalOverage/donorPool) : 0;
+
+  buckets.forEach(b=>{
+    b.adjustedRemaining=b.remainingPlanned>0 ? +(b.remainingPlanned*(1-cutRatio)).toFixed(1) : b.remainingPlanned;
+    if(b.slots){
+      const openSlots=b.slots.slice(b.filled||0);
+      const scale=b.remainingPlanned>0 ? (b.adjustedRemaining/b.remainingPlanned) : 1;
+      b.adjustedOpenSlots=openSlots.map(([lo,hi])=>{
+        const nlo=Math.max(1,Math.round(lo*scale));
+        return [nlo,Math.max(nlo,Math.round(hi*scale))];
+      });
+    }
+  });
+
+  return { totalOverage, cutRatio, buckets, shortfall:+Math.max(0,totalOverage-donorPool).toFixed(2) };
+}
+
+function renderRebalancePlan(){
+  const el=document.getElementById('rebalance-plan');
+  if(!el) return;
+  if(viewedTeam!==MY_TEAM){ el.style.display='none'; return; }
+  el.style.display='block';
+
+  let tp=viewedPicks();
+  if(rosterShowActiveBids) tp=tp.concat(pendingPicksForViewedTeam());
+  const plan=computeRebalancePlan(tp);
+
+  if(plan.totalOverage<=0){
+    el.innerHTML=`<div class="sp-head">
+      <div class="sp-title">Suggested Plan</div>
+      <div class="sp-total" style="color:var(--green);">On plan — no adjustment needed</div>
+    </div>`;
+    return;
+  }
+
+  const overRows=plan.buckets.filter(b=>b.remainingPlanned<0).map(b=>
+    `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+      <div class="sp-grp">${b.label}</div>
+      <div class="sp-nums over" style="text-align:left;">$${b.spent} spent · <strong>$${Math.abs(b.remainingPlanned)} over</strong> its $${b.budget} plan</div>
+    </div>`).join('');
+
+  const cutPct=Math.round(plan.cutRatio*100);
+  const adjRows=plan.buckets.filter(b=>b.remainingPlanned>0).map(b=>{
+    const bandsHtml=b.slots
+      ? b.slots.slice(b.filled||0).map((orig,i)=>{
+          const adj=b.adjustedOpenSlots[i];
+          return `$${orig[0]}-${orig[1]} → <strong style="color:var(--text);">$${adj[0]}-${adj[1]}</strong>`;
+        }).join(', ') || '— no open slots left —'
+      : `$${b.remainingPlanned} → <strong style="color:var(--text);">$${b.adjustedRemaining}</strong> left to spend`;
+    return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+      <div class="sp-grp">${b.label}<small>-${cutPct}%</small></div>
+      <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--text2);font-weight:400;">${bandsHtml}</div>
+    </div>`;
+  }).join('');
+
+  const shortfallHtml=plan.shortfall>0
+    ? `<div class="callout-amber" style="margin-top:14px;margin-bottom:0;">Even cutting every other open position to the bone is $${plan.shortfall.toFixed(0)} short of covering this — you'll need to punt bench/PS stashes further or reconsider a pending bid.</div>`
+    : '';
+
+  el.innerHTML=`
+    <div class="sp-head">
+      <div class="sp-title">Suggested Plan</div>
+      <div class="sp-total" style="color:var(--amber);">$${plan.totalOverage.toFixed(0)} over plan — here's how to adjust</div>
+    </div>
+    ${overRows}
+    ${adjRows}
+    ${shortfallHtml}`;
 }
 
 function renderSpendPlan(){
@@ -2048,6 +2142,7 @@ function setRosterActiveBids(show){
   if(bidsBtn) bidsBtn.classList.toggle('on',show);
   renderPlayers();
   renderSpendPlan();
+  renderRebalancePlan();
 }
 
 // Active nominations currently held by the viewed team, shaped like a pick
@@ -2373,13 +2468,13 @@ function computeTargets(picks) {
   // tied to one position. A candidate "fits the plan" if its value is within
   // ±10% of any open band in its own group, or (for RB/WR/TE) the FLEX group.
   // Cheap bench-range players (<=$10) always pass.
-  const { groups: myGroupFit } = computeSpendVsPlan(myPicks);
+  // computeRebalancePlan already shrinks each open band when another group has
+  // run over its plan, so a target that fits here already accounts for that —
+  // this is what makes "adjust other positions" a real recommendation change,
+  // not just a lower number shown in the Suggested Plan panel.
+  const rebalance = computeRebalancePlan(myPicks);
   const openBands = {};
-  Object.keys(SPEND_PLAN).forEach(g => {
-    const slots = SPEND_PLAN[g].slots.map(b => b.slice()); // clone [lo,hi] pairs
-    const filledCount = myGroupFit[g]?.count || 0;
-    openBands[g] = slots.slice(filledCount); // remaining slots after what's filled
-  });
+  rebalance.buckets.forEach(b => { if (b.slots) openBands[b.key] = b.adjustedOpenSlots; });
   function fitsPlan(r) {
     if (r.auction_value <= 10) return true;            // bench/stash money is reserved separately
     const groupsToCheck = [r.position];
