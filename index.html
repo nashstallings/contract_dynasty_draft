@@ -632,6 +632,8 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
       <button class="av-filter-btn" data-pos="RB" onclick="avSetPos('RB',this)">RB</button>
       <button class="av-filter-btn" data-pos="WR" onclick="avSetPos('WR',this)">WR</button>
       <button class="av-filter-btn" data-pos="TE" onclick="avSetPos('TE',this)">TE</button>
+      <div class="av-filter-sep"></div>
+      <button class="av-filter-btn" id="av-hide-drafted-btn" onclick="avToggleHideDrafted()">Hide drafted</button>
       <div class="av-sort-wrap">
         <label for="av-sort">Sort</label>
         <select id="av-sort" onchange="renderAV()">
@@ -780,6 +782,7 @@ let auctionValues=[];    // raw array from BQ
 let avMap=new Map();     // lowercase player_name → row  (O(1) lookups)
 let avTierFilter='ALL';
 let avPosFilter='ALL';
+let avHideDrafted=false;
 
 const BQ_URL='https://contract-dynasty-draft-845964113753.europe-west1.run.app';
 
@@ -823,6 +826,13 @@ function avSetPos(pos,btn){
   renderAV();
 }
 
+function avToggleHideDrafted(){
+  avHideDrafted=!avHideDrafted;
+  const btn=document.getElementById('av-hide-drafted-btn');
+  if(btn) btn.className='av-filter-btn'+(avHideDrafted?' on':'');
+  renderAV();
+}
+
 function renderAV(){
   const tbody=document.getElementById('av-tbody');
   if(!tbody) return;
@@ -834,6 +844,10 @@ function renderAV(){
   let rows=[...auctionValues];
   if(avTierFilter!=='ALL') rows=rows.filter(r=>r.tier===avTierFilter);
   if(avPosFilter!=='ALL')  rows=rows.filter(r=>r.position===avPosFilter);
+  if(avHideDrafted){
+    const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
+    rows=rows.filter(r=>!draftedNames.has(r.player_name.toLowerCase()));
+  }
   if(sortBy==='value') rows.sort((a,b)=>b.auction_value-a.auction_value);
   else if(sortBy==='pos') rows.sort((a,b)=>a.position.localeCompare(b.position)||a.rank-b.rank);
   else rows.sort((a,b)=>a.rank-b.rank);
