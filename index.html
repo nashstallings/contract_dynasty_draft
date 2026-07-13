@@ -1623,42 +1623,100 @@ function computeSpendVsPlan(picks){
   return { groups, benchSpent, benchDrafted, benchPending };
 }
 
-// Redistributes the plan when a group runs over budget. SPEND_PLAN's group
-// budgets + BENCH_BUDGET sum to exactly $250, so (budget - spent) summed
-// across every group always equals real remaining budget — but nothing
-// forces that deficit into any one group's displayed numbers. This takes
-// any group over its budget and shrinks every other still-open group's
-// remaining budget (and slot bands) proportionally, so "adjust elsewhere"
-// is an explicit, visible number instead of just less cash left overall.
+// Redistributes the plan when a group runs over budget, in two stages:
+//
+// 1. Free money first: a position that's already fully filled (e.g. 2/2 RBs)
+//    has no more slots to spend on, so any of its budget that went unspent is
+//    pure savings with zero opportunity cost — sweep it toward the overage
+//    before touching anything else.
+// 2. If that's not enough, concentrate the remaining cut into a small number
+//    of low-priority open positions (TE punt, FLEX, bench, then WR, RB, QB)
+//    instead of shaving a little off every position. Within a position with
+//    several remaining slots, drain the cheapest/last slot band first (e.g.
+//    a WR3 depth slot) before ever touching a pricier one (e.g. the WR1
+//    stud slot) — this is the "tier down" behavior: a couple of specific
+//    targets get cheaper, the rest of the plan is untouched.
+const CUT_PRIORITY=['TE','FLEX','BENCH','WR','RB','QB'];
+
 function computeRebalancePlan(myPicks){
   const { groups, benchSpent }=computeSpendVsPlan(myPicks);
   const buckets=Object.keys(SPEND_PLAN).map(g=>{
     const plan=SPEND_PLAN[g], grp=groups[g];
-    return { key:g, label:plan.label, budget:plan.budget, spent:grp.spent, filled:grp.count, slots:plan.slots };
+    return { key:g, label:plan.label, budget:plan.budget, spent:grp.spent, filled:grp.count, totalSlots:plan.slots.length, slots:plan.slots };
   });
-  buckets.push({ key:'BENCH', label:'Bench (top 15)', budget:BENCH_BUDGET, spent:benchSpent, filled:null, slots:null });
-
-  buckets.forEach(b=>{ b.remainingPlanned=+(b.budget-b.spent).toFixed(2); });
-
-  const totalOverage=+buckets.filter(b=>b.remainingPlanned<0)
-    .reduce((s,b)=>s-b.remainingPlanned,0).toFixed(2);
-  const donorPool=buckets.filter(b=>b.remainingPlanned>0)
-    .reduce((s,b)=>s+b.remainingPlanned,0);
-  const cutRatio=totalOverage>0 && donorPool>0 ? Math.min(1,totalOverage/donorPool) : 0;
+  buckets.push({ key:'BENCH', label:'Bench (top 15)', budget:BENCH_BUDGET, spent:benchSpent, filled:null, totalSlots:null, slots:null });
 
   buckets.forEach(b=>{
-    b.adjustedRemaining=b.remainingPlanned>0 ? +(b.remainingPlanned*(1-cutRatio)).toFixed(1) : b.remainingPlanned;
-    if(b.slots){
+    b.remainingPlanned=+(b.budget-b.spent).toFixed(2);
+    b.isClosed=b.slots ? (b.filled>=b.totalSlots) : false; // no open slots left to spend on
+
+    // Nominal $ share of each still-open slot, weighted by the slot's own
+    // band midpoint, so a stud slot naturally "owns" more of the remaining
+    // budget than a depth slot — this is what lets us drain the cheap slot
+    // first without touching the stud slot's number at all.
+    if(b.slots && !b.isClosed){
       const openSlots=b.slots.slice(b.filled||0);
-      const scale=b.remainingPlanned>0 ? (b.adjustedRemaining/b.remainingPlanned) : 1;
-      b.adjustedOpenSlots=openSlots.map(([lo,hi])=>{
-        const nlo=Math.max(1,Math.round(lo*scale));
-        return [nlo,Math.max(nlo,Math.round(hi*scale))];
-      });
+      const midSum=openSlots.reduce((s,[lo,hi])=>s+(lo+hi)/2,0)||1;
+      b.openSlotShares=openSlots.map(band=>({
+        band,
+        share:+(b.remainingPlanned*((band[0]+band[1])/2/midSum)).toFixed(2),
+      }));
     }
   });
 
-  return { totalOverage, cutRatio, buckets, shortfall:+Math.max(0,totalOverage-donorPool).toFixed(2) };
+  const totalOverage=+buckets.filter(b=>b.remainingPlanned<0)
+    .reduce((s,b)=>s-b.remainingPlanned,0).toFixed(2);
+
+  // Stage 1 — banked savings from fully-filled positions, free to redirect.
+  const bankedFree=+buckets.filter(b=>b.isClosed && b.remainingPlanned>0)
+    .reduce((s,b)=>s+b.remainingPlanned,0).toFixed(2);
+
+  let netNeeded=+Math.max(0,totalOverage-bankedFree).toFixed(2);
+
+  // Stage 2 — drain specific open positions, lowest-priority first.
+  buckets.forEach(b=>{ b.cutAmount=0; });
+  if(netNeeded>0){
+    const openBuckets=buckets.filter(b=>!b.isClosed && b.remainingPlanned>0);
+    CUT_PRIORITY.forEach(key=>{
+      if(netNeeded<=0) return;
+      const b=openBuckets.find(x=>x.key===key);
+      if(!b) return;
+      const take=Math.min(netNeeded,b.remainingPlanned);
+      b.cutAmount=+take.toFixed(2);
+      netNeeded=+(netNeeded-take).toFixed(2);
+    });
+  }
+
+  buckets.forEach(b=>{
+    if(b.isClosed){
+      b.adjustedRemaining=0; // banked and redirected — nothing left to reserve anyway
+      if(b.slots) b.adjustedOpenSlots=[];
+      return;
+    }
+    b.adjustedRemaining=+(b.remainingPlanned-b.cutAmount).toFixed(1);
+    if(!b.slots) return; // BENCH — nothing more to compute, it's a lump sum
+
+    if(!b.cutAmount){
+      b.adjustedOpenSlots=b.openSlotShares.map(o=>o.band.slice());
+      return;
+    }
+    // Drain cheapest (last) slot's share first, only spilling into the next
+    // one up if that alone isn't enough to cover this bucket's cut.
+    let toDrain=b.cutAmount;
+    const drained=new Array(b.openSlotShares.length).fill(0);
+    for(let i=b.openSlotShares.length-1;i>=0 && toDrain>0;i--){
+      const take=Math.min(toDrain,b.openSlotShares[i].share);
+      drained[i]=take;
+      toDrain=+(toDrain-take).toFixed(2);
+    }
+    b.adjustedOpenSlots=b.openSlotShares.map((o,i)=>{
+      const scale=o.share>0 ? Math.max(0,(o.share-drained[i])/o.share) : 1;
+      const nlo=Math.max(1,Math.round(o.band[0]*scale));
+      return [nlo,Math.max(nlo,Math.round(o.band[1]*scale))];
+    });
+  });
+
+  return { totalOverage, bankedFree, buckets, shortfall:+Math.max(0,netNeeded).toFixed(2) };
 }
 
 function renderRebalancePlan(){
@@ -1685,22 +1743,30 @@ function renderRebalancePlan(){
       <div class="sp-nums over" style="text-align:left;">$${b.spent} spent · <strong>$${Math.abs(b.remainingPlanned)} over</strong> its $${b.budget} plan</div>
     </div>`).join('');
 
-  const cutPct=Math.round(plan.cutRatio*100);
-  const adjRows=plan.buckets.filter(b=>b.remainingPlanned>0).map(b=>{
+  const bankedRows=plan.buckets.filter(b=>b.isClosed && b.remainingPlanned>0).map(b=>
+    `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+      <div class="sp-grp">${b.label}<small>${b.filled}/${b.totalSlots} filled</small></div>
+      <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--green);font-weight:400;">$${b.remainingPlanned} came in under plan — banked, redirected to cover the overage</div>
+    </div>`).join('');
+
+  const cutRows=plan.buckets.filter(b=>b.cutAmount>0).map(b=>{
+    const pct=Math.round(b.cutAmount/b.remainingPlanned*100);
     const bandsHtml=b.slots
-      ? b.slots.slice(b.filled||0).map((orig,i)=>{
+      ? b.openSlotShares.map((o,i)=>{
           const adj=b.adjustedOpenSlots[i];
-          return `$${orig[0]}-${orig[1]} → <strong style="color:var(--text);">$${adj[0]}-${adj[1]}</strong>`;
-        }).join(', ') || '— no open slots left —'
-      : `$${b.remainingPlanned} → <strong style="color:var(--text);">$${b.adjustedRemaining}</strong> left to spend`;
+          return (adj[0]===o.band[0]&&adj[1]===o.band[1])
+            ? `$${o.band[0]}-${o.band[1]} <span style="color:var(--text3);">(unchanged)</span>`
+            : `$${o.band[0]}-${o.band[1]} → <strong style="color:var(--amber);">$${adj[0]}-${adj[1]}</strong>`;
+        }).join(', ')
+      : `$${b.remainingPlanned} → <strong style="color:var(--amber);">$${b.adjustedRemaining}</strong> left to spend`;
     return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
-      <div class="sp-grp">${b.label}<small>-${cutPct}%</small></div>
+      <div class="sp-grp">${b.label}<small>tier down -${pct}%</small></div>
       <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--text2);font-weight:400;">${bandsHtml}</div>
     </div>`;
   }).join('');
 
   const shortfallHtml=plan.shortfall>0
-    ? `<div class="callout-amber" style="margin-top:14px;margin-bottom:0;">Even cutting every other open position to the bone is $${plan.shortfall.toFixed(0)} short of covering this — you'll need to punt bench/PS stashes further or reconsider a pending bid.</div>`
+    ? `<div class="callout-amber" style="margin-top:14px;margin-bottom:0;">Even tiering down every remaining position is $${plan.shortfall.toFixed(0)} short of covering this — you'll need to punt bench/PS stashes further or reconsider a pending bid.</div>`
     : '';
 
   el.innerHTML=`
@@ -1709,7 +1775,8 @@ function renderRebalancePlan(){
       <div class="sp-total" style="color:var(--amber);">$${plan.totalOverage.toFixed(0)} over plan — here's how to adjust</div>
     </div>
     ${overRows}
-    ${adjRows}
+    ${bankedRows}
+    ${cutRows}
     ${shortfallHtml}`;
 }
 
