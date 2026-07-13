@@ -774,9 +774,17 @@ const SPEND_PLAN={
 const BENCH_BUDGET=17;   // top-15 bench: mostly $1-3 dart throws
 const PLAN_BANDS_PCT=0.10;  // ±10% tolerance on slot bands for the Targets filter
 
+// Player names differ slightly between the BQ auction_values table and
+// nflreadpy/draft_picks (suffixes like "III"/"Jr.", "A.J." vs "AJ") — every
+// place that cross-references a player by name across those two sources
+// needs to compare on this normalized form, not a raw .toLowerCase().
+function normalizeName(name){
+  return String(name||'').toLowerCase().replace(/[.']/g,'').replace(/\s+(jr|sr|ii|iii|iv|v)$/,'').trim();
+}
+
 // Auction values state
 let auctionValues=[];    // raw array from BQ
-let avMap=new Map();     // lowercase player_name → row  (O(1) lookups)
+let avMap=new Map();     // normalizeName(player_name) → row  (O(1) lookups)
 let avTierFilter='ALL';
 let avPosFilter='ALL';
 let avHideDrafted=false;
@@ -794,7 +802,7 @@ async function loadAuctionValues(){
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const data=await resp.json();
     auctionValues=data.auction_values||[];
-    avMap=new Map(auctionValues.map(r=>[r.player_name.toLowerCase(),r]));
+    avMap=new Map(auctionValues.map(r=>[normalizeName(r.player_name),r]));
     if(el) el.textContent='';
     renderAV();
     renderNominations(); // target values now available for any nominations restored from storage
@@ -842,8 +850,8 @@ function renderAV(){
   if(avTierFilter!=='ALL') rows=rows.filter(r=>r.tier===avTierFilter);
   if(avPosFilter!=='ALL')  rows=rows.filter(r=>r.position===avPosFilter);
   if(avHideDrafted){
-    const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
-    rows=rows.filter(r=>!draftedNames.has(r.player_name.toLowerCase()));
+    const draftedNames=new Set(players.map(p=>normalizeName(p.name)));
+    rows=rows.filter(r=>!draftedNames.has(normalizeName(r.player_name)));
   }
   if(sortBy==='value') rows.sort((a,b)=>b.auction_value-a.auction_value);
   else if(sortBy==='pos') rows.sort((a,b)=>a.position.localeCompare(b.position)||a.rank-b.rank);
@@ -899,10 +907,10 @@ async function loadFromBQ(){
     }));
     // Drop any nomination for a player someone else already won (cleans up the
     // shared board if a "win" happened on another device between polls)
-    const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
-    const stale=nominations.filter(n=>draftedNames.has(n.player.display_name.toLowerCase()));
+    const draftedNames=new Set(players.map(p=>normalizeName(p.name)));
+    const stale=nominations.filter(n=>draftedNames.has(normalizeName(n.player.display_name)));
     if(stale.length){
-      nominations=nominations.filter(n=>!draftedNames.has(n.player.display_name.toLowerCase()));
+      nominations=nominations.filter(n=>!draftedNames.has(normalizeName(n.player.display_name)));
       renderNominations();
       stale.forEach(n=>deleteNominationRemote(n.id));
     }
@@ -1079,8 +1087,8 @@ async function deleteNominationRemote(id){
 }
 
 function alreadyOnBlockOrDrafted(name){
-  const lc=name.toLowerCase();
-  return players.some(p=>p.name.toLowerCase()===lc) || nominations.some(n=>n.player.display_name.toLowerCase()===lc);
+  const lc=normalizeName(name);
+  return players.some(p=>normalizeName(p.name)===lc) || nominations.some(n=>normalizeName(n.player.display_name)===lc);
 }
 
 function onNomAddSearch(val){
@@ -1098,7 +1106,7 @@ function onNomAddSearch(val){
   nomAddActiveIdx=-1;
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
   td.innerHTML=matches.map((p,i)=>{
-    const av=avMap.get(p.display_name.toLowerCase());
+    const av=avMap.get(normalizeName(p.display_name));
     const valHtml=av
       ?`<span class="td-item-val">$${av.auction_value}</span>`
       :`<span class="td-item-val" style="color:var(--text3);">—</span>`;
@@ -1222,7 +1230,7 @@ async function winNomination(id){
   const owner=nom.owner||MY_TEAM;
   const yrs=nom.yrs||1;
   const p=nom.player;
-  if(players.some(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase())){
+  if(players.some(pl=>normalizeName(pl.name)===normalizeName(p.display_name))){
     alert(`${p.display_name} is already drafted.`);
     nominations=nominations.filter(n=>n.id!==id);renderNominations();renderCapBreakdown();if(rosterShowActiveBids)renderPlayers();deleteNominationRemote(id);return;
   }
@@ -1250,7 +1258,7 @@ function tierClassOf(t){
 // budget + spending plan (so switching "Won by" re-checks fit for that team).
 function computeNomVerdict(nom){
   const p=nom.player,pos=p.position;
-  const av=avMap.get(p.display_name.toLowerCase());
+  const av=avMap.get(normalizeName(p.display_name));
   const bid=parseFloat(nom.bid)||0;
   const ownerPicks=players.filter(pl=>(pl.owner||MY_TEAM)===nom.owner);
   const ownerSpent=ownerPicks.reduce((s,pl)=>s+pl.sal,0);
@@ -1298,13 +1306,13 @@ function updateNomRowMeta(id){
   const el=document.getElementById('nom-meta-'+id);
   if(!nom||!el)return;
   const p=nom.player;
-  const av=avMap.get(p.display_name.toLowerCase());
+  const av=avMap.get(normalizeName(p.display_name));
   el.innerHTML=`${p.age!=null?p.age+'y':''}${av?' · Target $'+effectiveTarget(av,nom.yrs):''}`;
 }
 
 function buildNomRowHtml(nom){
   const p=nom.player,pos=p.position;
-  const av=avMap.get(p.display_name.toLowerCase());
+  const av=avMap.get(normalizeName(p.display_name));
   const pc={QB:'pQB',WR:'pWR',RB:'pRB',TE:'pTE'};
   return `<div class="tgt-card nom-card-row" id="nom-row-${nom.id}">
     <div class="tgt-rank">${av?'#'+av.rank:'—'}</div>
@@ -1705,7 +1713,7 @@ function renderTeamsTab(){
   if(!el) return;
 
   const positions=['QB','RB','WR','TE'];
-  const draftedNames=new Set(players.map(p=>p.name.toLowerCase()));
+  const draftedNames=new Set(players.map(p=>normalizeName(p.name)));
 
   // League-wide totals: drafted count/spend per position, and how many players
   // with a target value are still undrafted at that position (the visible pool).
@@ -1716,7 +1724,7 @@ function renderTeamsTab(){
 
   const poolLeft={}; positions.forEach(pos=>poolLeft[pos]=0);
   (auctionValues||[]).forEach(r=>{
-    if(poolLeft[r.position]!=null && !draftedNames.has(r.player_name.toLowerCase())) poolLeft[r.position]++;
+    if(poolLeft[r.position]!=null && !draftedNames.has(normalizeName(r.player_name))) poolLeft[r.position]++;
   });
 
   const scarcityHtml=`<div class="rules-grid">`+positions.map(pos=>{
@@ -1849,7 +1857,7 @@ function buildDraftAnalysisPoints(){
   const drafted=[];
   players.forEach(p=>{
     if(!daActivePositions.has(p.pos)) return;
-    const av=avMap.get(p.name.toLowerCase());
+    const av=avMap.get(normalizeName(p.name));
     if(!av||av.auction_value==null) return;
     drafted.push({x:+effectiveTarget(av,p.yrs),y:p.sal,pos:p.pos,name:p.name,owner:p.owner||MY_TEAM});
   });
@@ -1858,7 +1866,7 @@ function buildDraftAnalysisPoints(){
     nominations.forEach(n=>{
       const pos=n.player.position;
       if(!daActivePositions.has(pos)) return;
-      const av=avMap.get(n.player.display_name.toLowerCase());
+      const av=avMap.get(normalizeName(n.player.display_name));
       if(!av||av.auction_value==null) return;
       nominated.push({x:+effectiveTarget(av,n.yrs),y:parseFloat(n.bid)||0,pos,name:n.player.display_name,owner:n.owner||MY_TEAM});
     });
@@ -1935,7 +1943,7 @@ function renderDraftAnalysisValueTable(){
   const rows=nominations
     .filter(n=>daActivePositions.has(n.player.position))
     .map(n=>{
-      const av=avMap.get(n.player.display_name.toLowerCase());
+      const av=avMap.get(normalizeName(n.player.display_name));
       if(!av||av.auction_value==null) return null;
       const bid=parseFloat(n.bid)||0;
       const target=+effectiveTarget(av,n.yrs);
@@ -2030,7 +2038,7 @@ function buildRosterRowHtml(row){
   const gi=isPending?-1:players.indexOf(p); // global index for delete (real picks only)
   const d=DISC[p.yrs]||0;
   const cap=(p.sal*(1-d)).toFixed(1);
-  const av=avMap.get(p.name.toLowerCase());
+  const av=avMap.get(normalizeName(p.name));
   const targetCell=av
     ?`<span class="player-cell" style="color:var(--blue);">$${effectiveTarget(av,p.yrs)}</span>`
     :`<span class="player-cell ou-none">—</span>`;
@@ -2166,8 +2174,8 @@ function fmt(n,dec){dec=dec==null?0:dec;if(n==null||isNaN(n))return '—';return
 
 function renderEvalPlayer(p,data){
   const pos=p.position,s=data.season||{},weekly=data.weekly||[];
-  const drafted=players.find(pl=>pl.name.toLowerCase()===p.display_name.toLowerCase());
-  const av=avMap.get(p.display_name.toLowerCase());
+  const drafted=players.find(pl=>normalizeName(pl.name)===normalizeName(p.display_name));
+  const av=avMap.get(normalizeName(p.display_name));
 
   document.getElementById('eval-name').textContent=p.display_name;
   document.getElementById('eval-meta').textContent=[pos,p.latest_team,p.age!=null?p.age+' yrs':null].filter(Boolean).join(' · ');
@@ -2367,7 +2375,7 @@ function computeTargets(picks) {
   const remaining = 250 - spent;
 
   // A player is unavailable if ANY team has drafted them.
-  const drafted   = new Set(picks.map(p => p.name.toLowerCase()));
+  const drafted   = new Set(picks.map(p => normalizeName(p.name)));
 
   // Current roster composition — my team only
   const have = { QB:0, RB:0, WR:0, TE:0 };
@@ -2408,7 +2416,7 @@ function computeTargets(picks) {
   // Available players sorted by priority score (excludes anyone any team drafted,
   // and anyone whose price doesn't fit an open slot band in the spending plan)
   const avail = auctionValues
-    .filter(r => !drafted.has(r.player_name.toLowerCase()) && r.auction_value <= remaining && fitsPlan(r))
+    .filter(r => !drafted.has(normalizeName(r.player_name)) && r.auction_value <= remaining && fitsPlan(r))
     .map(r => ({ ...r, _score: scorePlayer(r, context) }))
     .sort((a, b) => b._score - a._score);
 
