@@ -1737,31 +1737,45 @@ function renderRebalancePlan(){
     return;
   }
 
-  const overRows=plan.buckets.filter(b=>b.remainingPlanned<0).map(b=>
-    `<div class="sp-row" style="grid-template-columns:150px 1fr;">
-      <div class="sp-grp">${b.label}</div>
-      <div class="sp-nums over" style="text-align:left;">$${b.spent} spent · <strong>$${Math.abs(b.remainingPlanned)} over</strong> its $${b.budget} plan</div>
-    </div>`).join('');
-
-  const bankedRows=plan.buckets.filter(b=>b.isClosed && b.remainingPlanned>0).map(b=>
-    `<div class="sp-row" style="grid-template-columns:150px 1fr;">
-      <div class="sp-grp">${b.label}<small>${b.filled}/${b.totalSlots} filled</small></div>
-      <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--green);font-weight:400;">$${b.remainingPlanned} came in under plan — banked, redirected to cover the overage</div>
-    </div>`).join('');
-
-  const cutRows=plan.buckets.filter(b=>b.cutAmount>0).map(b=>{
-    const pct=Math.round(b.cutAmount/b.remainingPlanned*100);
+  // Every position gets exactly one row, in the same order as the Spending
+  // Plan above it — nothing silently disappears just because it wasn't
+  // touched. The status (over / banked / tiered down / untouched) decides
+  // how that one row reads.
+  const rows=plan.buckets.map(b=>{
+    if(b.remainingPlanned<0){
+      return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+        <div class="sp-grp">${b.label}</div>
+        <div class="sp-nums over" style="text-align:left;">$${b.spent} spent · <strong>$${Math.abs(b.remainingPlanned)} over</strong> its $${b.budget} plan</div>
+      </div>`;
+    }
+    if(b.isClosed && b.remainingPlanned>0){
+      return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+        <div class="sp-grp">${b.label}<small>${b.filled}/${b.totalSlots} filled</small></div>
+        <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--green);font-weight:400;">$${b.remainingPlanned} came in under plan — banked, redirected to cover the overage</div>
+      </div>`;
+    }
+    if(b.cutAmount>0){
+      const pct=Math.round(b.cutAmount/b.remainingPlanned*100);
+      const bandsHtml=b.slots
+        ? b.openSlotShares.map((o,i)=>{
+            const adj=b.adjustedOpenSlots[i];
+            return (adj[0]===o.band[0]&&adj[1]===o.band[1])
+              ? `$${o.band[0]}-${o.band[1]} <span style="color:var(--text3);">(unchanged)</span>`
+              : `$${o.band[0]}-${o.band[1]} → <strong style="color:var(--amber);">$${adj[0]}-${adj[1]}</strong>`;
+          }).join(', ')
+        : `$${b.remainingPlanned} → <strong style="color:var(--amber);">$${b.adjustedRemaining}</strong> left to spend`;
+      return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
+        <div class="sp-grp">${b.label}<small>tier down -${pct}%</small></div>
+        <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--text2);font-weight:400;">${bandsHtml}</div>
+      </div>`;
+    }
+    // Untouched — still shown, just with its original plan and no change.
     const bandsHtml=b.slots
-      ? b.openSlotShares.map((o,i)=>{
-          const adj=b.adjustedOpenSlots[i];
-          return (adj[0]===o.band[0]&&adj[1]===o.band[1])
-            ? `$${o.band[0]}-${o.band[1]} <span style="color:var(--text3);">(unchanged)</span>`
-            : `$${o.band[0]}-${o.band[1]} → <strong style="color:var(--amber);">$${adj[0]}-${adj[1]}</strong>`;
-        }).join(', ')
-      : `$${b.remainingPlanned} → <strong style="color:var(--amber);">$${b.adjustedRemaining}</strong> left to spend`;
+      ? (b.openSlotShares.length ? b.openSlotShares.map(o=>`$${o.band[0]}-${o.band[1]}`).join(', ') : '— no open slots left —')
+      : `$${b.remainingPlanned} left to spend`;
     return `<div class="sp-row" style="grid-template-columns:150px 1fr;">
-      <div class="sp-grp">${b.label}<small>tier down -${pct}%</small></div>
-      <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--text2);font-weight:400;">${bandsHtml}</div>
+      <div class="sp-grp">${b.label}<small>no change</small></div>
+      <div class="sp-nums" style="text-align:left;font-family:var(--font-mono);font-size:12px;color:var(--text3);font-weight:400;">${bandsHtml}</div>
     </div>`;
   }).join('');
 
@@ -1774,9 +1788,7 @@ function renderRebalancePlan(){
       <div class="sp-title">Suggested Plan</div>
       <div class="sp-total" style="color:var(--amber);">$${plan.totalOverage.toFixed(0)} over plan — here's how to adjust</div>
     </div>
-    ${overRows}
-    ${bankedRows}
-    ${cutRows}
+    ${rows}
     ${shortfallHtml}`;
 }
 
