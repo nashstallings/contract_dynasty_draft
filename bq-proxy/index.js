@@ -21,16 +21,37 @@ exports.draftPicksInsert = async (req, res) => {
       try {
         const [rows] = await bq.query({
           query: `
-            SELECT
-              gsis_id,
-              display_name,
-              position,
-              CAST(FLOOR(age) AS INT64) AS age,
-              latest_team
-            FROM \`${PROJECT}.nflreadpy.players\`
-            WHERE position IN ('QB','WR','RB','TE')
-              AND last_season >= 2023
-              AND display_name IS NOT NULL
+            SELECT gsis_id, display_name, position, age, latest_team FROM (
+              SELECT
+                gsis_id,
+                display_name,
+                position,
+                CAST(FLOOR(age) AS INT64) AS age,
+                latest_team
+              FROM \`${PROJECT}.nflreadpy.players\`
+              WHERE position IN ('QB','WR','RB','TE')
+                AND last_season >= 2023
+                AND display_name IS NOT NULL
+
+              UNION ALL
+
+              -- Players on the auction-values cheat sheet with no match in
+              -- nflreadpy (typically true rookies not yet ingested there, e.g.
+              -- carrying a Sleeper-only ID instead of a real gsis_id) — without
+              -- this they're priced on the cheat sheet but impossible to search
+              -- for and nominate in the draft tracker.
+              SELECT
+                av.player_id AS gsis_id,
+                av.player_name AS display_name,
+                av.position,
+                CAST(FLOOR(pl.age) AS INT64) AS age,
+                pl.latest_team AS latest_team
+              FROM \`${PROJECT}.dynasty_tycoon.player_auction_values\` av
+              LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl
+                ON pl.gsis_id = TRIM(av.player_id)
+              WHERE pl.gsis_id IS NULL
+                AND av.position IN ('QB','WR','RB','TE')
+            )
             ORDER BY display_name ASC
           `,
         });
@@ -61,7 +82,7 @@ exports.draftPicksInsert = async (req, res) => {
               pl.latest_team AS team
             FROM \`${PROJECT}.dynasty_tycoon.player_auction_values\` av
             LEFT JOIN \`${PROJECT}.nflreadpy.players\` pl
-              ON pl.gsis_id = av.player_id
+              ON pl.gsis_id = TRIM(av.player_id)
             ORDER BY av.rank ASC
           `,
         });
