@@ -581,7 +581,7 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
         </div>
         <div class="fg"><label>Bid $</label><input type="number" id="nom-add-bid" min="0" placeholder="0" onkeydown="if(event.key==='Enter')addNomination();"/></div>
         <div class="fg"><label>Contract</label>
-          <select id="nom-add-yrs"><option value="1">1 year</option><option value="2">2 years (−8%)</option><option value="3">3 years (−16%)</option><option value="4">4 years (−24%)</option></select>
+          <select id="nom-add-yrs"><option value="1">1 year</option><option value="2">2 years</option><option value="3">3 years</option><option value="4">4 years</option></select>
         </div>
         <div class="fg"><label>Won by</label>
           <select id="nom-add-owner"></select>
@@ -730,7 +730,6 @@ body{min-height:100vh;max-width:1000px;margin:0 auto;padding:0 0 80px;}
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & state
 // ─────────────────────────────────────────────────────────────────────────────
-const DISC={1:0,2:.08,3:.16,4:.24};
 const DM_PCT={0:0,1:0,2:.25,3:.50,4:.75,5:1.00};
 
 // Longer contracts should price closer to the dynasty (age-aware) target;
@@ -1334,9 +1333,9 @@ function buildNomRowHtml(nom){
       </div>
       <div class="fg"><select onchange="onNomYrsChange('${nom.id}',this.value)">
         <option value="1"${nom.yrs===1?' selected':''}>1 year</option>
-        <option value="2"${nom.yrs===2?' selected':''}>2 years (−8%)</option>
-        <option value="3"${nom.yrs===3?' selected':''}>3 years (−16%)</option>
-        <option value="4"${nom.yrs===4?' selected':''}>4 years (−24%)</option>
+        <option value="2"${nom.yrs===2?' selected':''}>2 years</option>
+        <option value="3"${nom.yrs===3?' selected':''}>3 years</option>
+        <option value="4"${nom.yrs===4?' selected':''}>4 years</option>
       </select></div>
       <div style="display:flex;gap:6px;">
         <button class="add-btn" style="flex:1;padding:8px;font-size:12px;" onclick="winNomination('${nom.id}')">Win</button>
@@ -1362,11 +1361,11 @@ function renderNominations(){
 }
 
 async function writeToBQ(player){
-  const discount=DISC[player.yrs]||0;
-  const cap=player.sal*(1-discount);
+  // Multi-year contracts don't actually discount the cap hit — that was a
+  // bidding-time convenience only, not a real reduction in commitment.
   const row={pick_id:player.pick_id,drafted_at:new Date().toISOString(),owner:player.owner||MY_TEAM,player_name:player.name,
     position:player.pos,age:player.age,salary:player.sal,contract_yrs:player.yrs,
-    discount_pct:discount*100,cap_hit:parseFloat(cap.toFixed(2)),total_commitment:parseFloat((cap*player.yrs).toFixed(2))};
+    discount_pct:0,cap_hit:player.sal,total_commitment:parseFloat((player.sal*player.yrs).toFixed(2))};
   showBQStatus('saving');
   try{
     const resp=await fetch(BQ_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)});
@@ -1511,13 +1510,12 @@ function renderCapBreakdown(){
   if(!el) return;
   const tp=viewedPicks();
 
-  // Per-year committed cap: each player's escalated, discounted salary for the
-  // seasons their contract covers. Year offset k: base × (1 + escalation)^k.
+  // Per-year committed cap: each player's escalated salary for the seasons
+  // their contract covers. Year offset k: base × (1 + escalation)^k.
   const committed=[0,0,0,0];
   const lenCounts={1:0,2:0,3:0,4:0};
   tp.forEach(p=>{
-    const d=DISC[p.yrs]||0;
-    const base=p.sal*(1-d);
+    const base=p.sal;
     lenCounts[p.yrs]=(lenCounts[p.yrs]||0)+1;
     for(let k=0;k<p.yrs && k<SEASONS.length;k++){
       committed[k]+=base*Math.pow(1+ESCALATION,k);
@@ -1527,9 +1525,6 @@ function renderCapBreakdown(){
   // of cap/contract impact from bids still in progress. Netted into
   // "Available" below (not just shown alongside it), so Available reflects
   // what you'd actually have left if every active bid you're holding wins.
-  // Unlike committed picks above, this does NOT apply the multi-year discount
-  // to the bid — a nomination's bid hasn't been locked into a signed contract
-  // yet, so it escalates at full value until it actually converts to a pick.
   const activeNoms=nominations.filter(n=>(n.owner||MY_TEAM)===viewedTeam);
   const activeCommitted=[0,0,0,0];
   const activeLenCounts={1:0,2:0,3:0,4:0};
@@ -1768,8 +1763,7 @@ function renderTeamsTab(){
   // in draft order, so reverse it for a most-recent-on-top activity feed).
   const historyHtml=[...players].reverse().map(p=>{
     const gi=players.indexOf(p);
-    const d=DISC[p.yrs]||0;
-    const cap=(p.sal*(1-d)).toFixed(1);
+    const cap=p.sal.toFixed(1);
     const owner=p.owner||MY_TEAM;
     const isMe=owner===MY_TEAM;
     return `<div class="hist-row-item">
@@ -1778,7 +1772,7 @@ function renderTeamsTab(){
       <span style="text-align:center;"><span class="ptag ${pc[p.pos]||'t4'}">${p.pos}</span></span>
       <span class="player-cell hist-age-cell">${p.age}</span>
       <span class="player-cell bold">$${p.sal}</span>
-      <span class="player-cell hist-contract-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
+      <span class="player-cell hist-contract-cell">${p.yrs}yr</span>
       <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
       <button class="del-btn" onclick="delP(${gi})" aria-label="Remove player">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -2036,8 +2030,7 @@ function buildRosterRowHtml(row){
   const p=row.player;
   const isPending=!!p.pending;
   const gi=isPending?-1:players.indexOf(p); // global index for delete (real picks only)
-  const d=DISC[p.yrs]||0;
-  const cap=(p.sal*(1-d)).toFixed(1);
+  const cap=p.sal.toFixed(1);
   const av=avMap.get(normalizeName(p.name));
   const targetCell=av
     ?`<span class="player-cell" style="color:var(--blue);">$${effectiveTarget(av,p.yrs)}</span>`
@@ -2052,7 +2045,7 @@ function buildRosterRowHtml(row){
     <span class="player-cell bold">$${p.sal}</span>
     ${targetCell}
     <span class="player-cell">${ouBadge(p.sal,av,p.yrs)}</span>
-    <span class="player-cell">${p.yrs}yr −${Math.round(d*100)}%</span>
+    <span class="player-cell">${p.yrs}yr</span>
     <span class="player-cell bold" style="color:var(--green);">$${cap}</span>
     <button class="del-btn" onclick="${delAction}" aria-label="${delLabel}">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
