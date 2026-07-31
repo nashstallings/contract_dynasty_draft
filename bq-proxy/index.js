@@ -122,13 +122,15 @@ exports.draftPicksInsert = async (req, res) => {
                   SUM(fantasy_points_ppr)    AS fantasy_pts_ppr
                 FROM \`${PROJECT}.nflreadpy.player_stats\`
                 WHERE player_id = @gsis_id
+                  AND season = 2025
                   AND season_type = 'REG'
                 GROUP BY player_id
               ),
               snaps AS (
                 SELECT pfr_player_id, AVG(offense_pct) AS snap_pct
                 FROM \`${PROJECT}.nflreadpy.snap_counts\`
-                WHERE game_type = 'REG'
+                WHERE season = 2025
+                  AND game_type = 'REG'
                 GROUP BY pfr_player_id
               ),
               opp AS (
@@ -138,6 +140,7 @@ exports.draftPicksInsert = async (req, res) => {
                   AVG(total_fantasy_points / NULLIF(total_fantasy_points_exp, 0)) AS wopr
                 FROM \`${PROJECT}.nflreadpy.ff_opportunity\`
                 WHERE player_id = @gsis_id
+                  AND season = 2025
                 GROUP BY player_id
               )
               SELECT
@@ -160,6 +163,7 @@ exports.draftPicksInsert = async (req, res) => {
               SELECT week, SUM(fantasy_points_ppr) AS fantasy_pts
               FROM \`${PROJECT}.nflreadpy.player_stats\`
               WHERE player_id = @gsis_id
+                AND season = 2025
                 AND season_type = 'REG'
               GROUP BY week
               ORDER BY week ASC
