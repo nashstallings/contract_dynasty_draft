@@ -30,11 +30,12 @@ players = pd.merge(players, ids, on="gsis_id", how="left", suffixes=("", "_y"))
 players.drop(players.filter(regex="_y$").columns.tolist(), axis=1, inplace=True)
 write(players, "players")
 
-# Player Stats
-player_stats = nfl.load_player_stats(2025, "week").to_pandas()
+# Player Stats (2022 -- current season; bump the end of this range each
+# new season, since load_player_stats needs an explicit season list)
+player_stats = nfl.load_player_stats(list(range(2022, 2026)), "week").to_pandas()
 player_stats = player_stats[player_stats["position"].isin(["QB", "RB", "WR", "TE"])].reset_index()
 player_stats["weekly_positional_ranks"] = (
-    player_stats.groupby(["week", "position"])["fantasy_points_ppr"]
+    player_stats.groupby(["season", "week", "position"])["fantasy_points_ppr"]
     .rank(method="min", ascending=False)
 )
 write(player_stats, "player_stats")
